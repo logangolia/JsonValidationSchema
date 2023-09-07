@@ -1,0 +1,9 @@
+Emerson:
+    work on processing command line arguments
+    check JSON valifity
+Logan:
+    Database/document structure
+    Methods (get/put)
+Brian:
+    Design/Architecture
+    Document structure

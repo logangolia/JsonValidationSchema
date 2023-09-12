@@ -1,6 +1,6 @@
 Emerson:
     work on processing command line arguments
-    check JSON valifity
+    check JSON validity
 Logan:
     Database/document structure
     Methods (get/put)

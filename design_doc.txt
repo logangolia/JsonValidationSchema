@@ -39,6 +39,7 @@ func (d database) get(){
     //response indicating success and the file name if successful	
 }
 
+We must use visitor patterns to access files.
 
 1.	type visitor interface {
 2.	accessFile(JSONdoc)
@@ -49,8 +50,6 @@ func (d database) get(){
 7.	func (obj *JSONdoc) accept(v visitor){
 8.	v.accessFile(obj)
 9.	}
-
-We must use visitor patterns to access files.
 
 Create working operations, then add authentication for PUT.
 

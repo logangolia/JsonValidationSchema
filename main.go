@@ -4,6 +4,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,6 +19,15 @@ func main() {
 	var err error
 
 	// Your code goes here.
+
+	// Set port as defined at -p, with default port 3318
+	portPtr := flag.Int("p", 3318, "port on which the server will listen")
+	flag.Parse()
+
+	port = *portPtr
+
+	// Set server address based on port
+	server.Addr = ":" + fmt.Sprintf("%d", port)
 
 	// The following code should go last and remain unchanged.
 	// Note that you must actually initialize 'server' and 'port'

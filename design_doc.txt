@@ -1,0 +1,66 @@
+COMP 318 OwlDB Design Project
+Summary of project file:
+We are creating a database that will store files. These are JSON values whose contents must be stored as type []byte in Go. These
+values can be nested arbitraily deeply. There are multiple checks we have to make before and after on the user as they operate in
+the database.
+
+We have the schema that will check the documents for formatting inside the repository, which we must use.
+
+[Will add as we go on. I wanna keep focus on one thing at a time but I will keep in mind the overall structure of the program]
+
+For this check-in, we only need to be able to put and store the documents and retrive them from the top level. Thus, right now,
+I would focus on the functions, and then after the functions are working, we can add another private response function and write
+the HTTP codes.
+
+PUT should store each piece of data as a struct. This means it has to be recursive, so if we can do that up front instead of just
+be only able to read in the database and a document one level deep then PUT and GET for paths will be simple.
+
+GET, on the other hand, must stay concurrent with the files in the database. This means that at least for the check-in, we should be
+able to PUT something in the database, get it, and repeat with different files and the same result.
+
+
+Overall, PUT and GET should operate on the database struct, which should look something like this:
+
+type database struct {
+    createdBy string      (username)
+    createdAt string      (timestamp)
+    lastModifiedBy string (username)
+    lastModifiedAt string (timestamp)
+    //database contents
+}
+
+func (d database) put(){
+    //recursive work structure
+    //response indicating success
+}
+
+func (d database) get(){
+    //work
+    //response indicating success and the file name if successful	
+}
+
+
+1.	type visitor interface {
+2.	accessFile(JSONdoc)
+3.	}
+4.	
+5.	func accept(v visitor)
+6.	
+7.	func (obj *JSONdoc) accept(v visitor){
+8.	v.accessFile(obj)
+9.	}
+
+We must use visitor patterns to access files.
+
+Create working operations, then add authentication for PUT.
+
+Here is the form for path structure required by the check-in. Note that eventually we will have to deal
+with paths that look like /v1/{database}/{doc1}/{doc2}/{doc3}/.
+
+PUT /v1/{database}
+GET /v1/{database}/
+
+For these functions, we only need to support a document name, not a document path.
+PUT /v1/{database}/{documentName}
+GET /v1/{database}/{documentName}
+

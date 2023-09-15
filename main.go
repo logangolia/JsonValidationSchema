@@ -19,6 +19,30 @@ import (
 	"time"
 )
 
+type DatabaseService struct {
+	mu        sync.Mutex
+	databases map[string]*Collection
+}
+
+type Document struct {
+	name        string
+	data        []byte
+	collections map[string]*Collection
+	metadata    Metadata
+}
+
+type Collection struct {
+	name      string
+	documents map[string]*Document
+}
+
+type Metadata struct {
+	createdBy      string
+	createdAt      time.Time
+	lastModifiedBy string
+	lastModifiedAt time.Time
+}
+
 // "github.com/santhosh-tekuri/jsonschema/v5/httploader"
 
 func main() {
@@ -212,30 +236,6 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated) // Indicate that a new document was created
 	}
 	return
-}
-
-type DatabaseService struct {
-	mu        sync.Mutex
-	databases map[string]*Collection
-}
-
-type Document struct {
-	name        string
-	data        []byte
-	collections map[string]*Collection
-	metadata    Metadata
-}
-
-type Collection struct {
-	name      string
-	documents map[string]*Document
-}
-
-type Metadata struct {
-	createdBy      string
-	createdAt      time.Time
-	lastModifiedBy string
-	lastModifiedAt time.Time
 }
 
 // splitPath splits the given path into its components.

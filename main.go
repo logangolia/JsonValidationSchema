@@ -4,14 +4,17 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -34,26 +37,8 @@ func main() {
 	// Set server address based on port
 	server.Addr = ":" + fmt.Sprintf("%d", port)
 
-	// // Code to test splitpath and processpath functions
-	// ds := setupMockData()
-
-	// tests := []string{
-	// 	"/comp318/",
-	// 	"/comp318/group1",
-	// 	"/comp318/group1/members/rixner",
-	// 	"/wrongdb/",
-	// 	"/comp318/wrongdoc",
-	// 	"/comp318/group1/wrongcollection",
-	// }
-
-	// for _, test := range tests {
-	// 	db, doc, col, err := ds.processPath(test)
-	// 	if err != nil {
-	// 		fmt.Printf("Test for path %s failed with error: %s\n", test, err)
-	// 	} else {
-	// 		fmt.Printf("For path %s, found:\nDatabase: %+v\nDocument: %+v\nCollection: %+v\n\n", test, db, doc, col)
-	// 	}
-	// }
+	// Assign the handler to the server
+	server.Handler = NewHandler()
 
 	// The following code should go last and remain unchanged.
 	// Note that you must actually initialize 'server' and 'port'
@@ -78,25 +63,179 @@ func main() {
 	}
 }
 
+func NewHandler() http.Handler {
+	// Create server mux
+	mux := http.NewServeMux()
+
+	// Create new highest-level database, a DatabaseService
+	dbService := &DatabaseService{
+		databases: make(map[string]*Collection),
+	}
+
+	// One HandleFunc with switch cases for Get/Put
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			dbService.HandleGet(w, r)
+		case http.MethodPut:
+			dbService.HandlePut(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	return mux
+}
+
+func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
+	// Get the parts of the path from splitPath
+	pathParts, err := splitPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// If the path is empty it is invalid
+	if len(pathParts) == 0 {
+		http.Error(w, "Empty Path", http.StatusBadRequest)
+		return
+	}
+
+	// Lock for the rest of the func
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	// Check if the database exists
+	database, dbExists := ds.databases[pathParts[0]]
+	if !dbExists {
+		http.Error(w, "Database does not exist", http.StatusBadRequest)
+	}
+
+	if len(pathParts) == 1 {
+		// We are getting a database
+
+		// Loop through all the documents in the database to marshall and write
+		var names []string
+		for name := range database.documents {
+			names = append(names, name)
+		}
+		responseData, ok := json.Marshal(names)
+		if ok != nil {
+			http.Error(w, "Error marshaling", http.StatusInternalServerError)
+		} else {
+			w.WriteHeader(http.StatusOK)
+			w.Write(responseData)
+		}
+	} else {
+		// We are getting a document
+
+		// Check if the document exists
+		document, documentExists := database.documents[pathParts[1]]
+		if documentExists {
+			// Marshall and write the document
+			responseData, ok := json.Marshal(document)
+			if ok != nil {
+				http.Error(w, "Error marshaling", http.StatusInternalServerError)
+			} else {
+				w.WriteHeader(http.StatusOK)
+				w.Write(responseData)
+			}
+		} else {
+			http.Error(w, "Document does not exist", http.StatusBadRequest)
+		}
+	}
+	return
+}
+
+func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
+	// Get the parts of the path from splitPath
+	pathParts, err := splitPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Invalid if path is empty
+	if len(pathParts) == 0 {
+		http.Error(w, "Empty Path", http.StatusBadRequest)
+		return
+	}
+
+	// Lock for the rest of the func
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	if len(pathParts) == 1 {
+		// We're dealing with a database
+		databaseName := pathParts[0]
+
+		// Check if the databaseName already exists in ds.databases
+		_, databaseExists := ds.databases[databaseName]
+
+		// If the database doesn't exist, create a new one
+		if databaseExists {
+			http.Error(w, "Database already exists", http.StatusConflict)
+		} else {
+			ds.databases[databaseName] = &Collection{
+				documents: make(map[string]*Document),
+			}
+			w.WriteHeader(http.StatusCreated) // Indicate that a new database was created
+		}
+	} else {
+		// We're dealing with a document
+		// Check that the database where the document will go exists
+		database, ok := ds.databases[pathParts[0]]
+		if !ok {
+			http.Error(w, "Invalid Database", http.StatusNotFound)
+			return
+		}
+
+		// Read the body of the message
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+			return
+		}
+		defer r.Body.Close()
+
+		// We're dealing with a document
+		database.documents[pathParts[1]] = &Document{
+			data:        body,
+			collections: make(map[string]*Collection),
+			metadata: Metadata{
+				createdBy:      "server",
+				createdAt:      time.Now(),
+				lastModifiedBy: "server",
+				lastModifiedAt: time.Now(),
+			},
+		}
+		w.WriteHeader(http.StatusCreated) // Indicate that a new document was created
+	}
+	return
+}
+
 type DatabaseService struct {
-	Databases map[string]*Collection
+	mu        sync.Mutex
+	databases map[string]*Collection
 }
 
 type Document struct {
-	Data        []byte
-	Collections map[string]*Collection
-	Metadata    Metadata
+	name        string
+	data        []byte
+	collections map[string]*Collection
+	metadata    Metadata
 }
 
 type Collection struct {
-	Documents map[string]*Document
+	name      string
+	documents map[string]*Document
 }
 
 type Metadata struct {
-	CreatedBy      string
-	CreatedAt      time.Time
-	LastModifiedBy string
-	LastModifiedAt time.Time
+	createdBy      string
+	createdAt      time.Time
+	lastModifiedBy string
+	lastModifiedAt time.Time
 }
 
 // splitPath splits the given path into its components.
@@ -118,74 +257,4 @@ func splitPath(path string) ([]string, error) {
 
 	// The returned slice removes the leading and trailing slashes and decodes any percent-encoded values.
 	return parts, nil
-}
-
-func (ds *DatabaseService) processPath(path string) (*Collection, *Document, *Collection, error) {
-	// Get the individual parts of the path
-	parts, err := splitPath(path)
-	if err != nil {
-		fmt.Println("Error processing path:", err)
-		return nil, nil, nil, err
-	}
-
-	// If the path is empty, it is invalid
-	if len(parts) == 0 {
-		return nil, nil, nil, fmt.Errorf("Invalid path")
-	}
-
-	// The database is the first part of the path
-	database, ok := ds.Databases[parts[0]]
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("Database not found")
-	}
-
-	// Initalize document and collection for return
-	var document *Document
-	var collection *Collection
-
-	// This will keep track of the current collection context
-	currentCollection := database
-
-	// Loop through the rest of the parts of the path
-	for i := 1; i < len(parts); i++ {
-		if i%2 == 1 {
-			// Odd indices are documents
-			document, ok = currentCollection.Documents[parts[i]]
-			if !ok {
-				return nil, nil, nil, fmt.Errorf("Document %s not found", parts[i])
-			}
-		} else {
-			// Even indices are collections
-			collection, ok = document.Collections[parts[i]]
-			if !ok {
-				return nil, nil, nil, fmt.Errorf("Collection %s not found", parts[i])
-			}
-			// Update current collection context
-			currentCollection = collection
-		}
-	}
-	return database, document, collection, nil
-}
-
-// Function to create some data for simple testing
-// Just for testing processPath and splitPath, we should delete when we can PUT data ourselves.
-func setupMockData() *DatabaseService {
-	ds := &DatabaseService{
-		Databases: map[string]*Collection{
-			"comp318": {
-				Documents: map[string]*Document{
-					"group1": {
-						Collections: map[string]*Collection{
-							"members": {
-								Documents: map[string]*Document{
-									"rixner": {},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	return ds
 }

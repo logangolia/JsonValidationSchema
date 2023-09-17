@@ -25,15 +25,17 @@ type DatabaseService struct {
 }
 
 type Document struct {
-	name        string
-	data        []byte
-	collections map[string]*Collection
-	metadata    Metadata
+	Name        string `json:"path"`
+	Data        []byte `json:"doc"`
+	Collections map[string]*Collection
+	Metadata    Metadata `json:"meta"`
+	URI         URIstruct
 }
 
 type Collection struct {
-	name      string
-	documents map[string]*Document
+	name      string               `json:"-"`
+	documents map[string]*Document `json:"-"`
+	URI       URIstruct
 }
 
 type Metadata struct {
@@ -41,6 +43,10 @@ type Metadata struct {
 	createdAt      time.Time
 	lastModifiedBy string
 	lastModifiedAt time.Time
+}
+
+type URIstruct struct {
+	URI string `json:"uri"`
 }
 
 // "github.com/santhosh-tekuri/jsonschema/v5/httploader"
@@ -124,6 +130,10 @@ func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(pathParts) > 0 && pathParts[0] == "v1" {
+		pathParts = pathParts[1:]
+	}
+
 	// If the path is empty it is invalid
 	if len(pathParts) == 0 {
 		http.Error(w, "Empty Path", http.StatusBadRequest)
@@ -137,24 +147,23 @@ func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
 	// Check if the database exists
 	database, dbExists := ds.databases[pathParts[0]]
 	if !dbExists {
-		http.Error(w, "Database does not exist", http.StatusBadRequest)
+		http.Error(w, "Database does not exist", http.StatusNotFound)
 	}
 
 	if len(pathParts) == 1 {
 		// We are getting a database
 
 		// Loop through all the documents in the database to marshall and write
-		var names []string
-		for name := range database.documents {
-			names = append(names, name)
+		totalResponseData := make([]byte, 0)
+		for _, document := range database.documents {
+			responseData, ok := json.Marshal(document)
+			if ok != nil {
+				http.Error(w, "Error marshaling", http.StatusInternalServerError)
+			}
+			totalResponseData = append(totalResponseData, responseData...)
 		}
-		responseData, ok := json.Marshal(names)
-		if ok != nil {
-			http.Error(w, "Error marshaling", http.StatusInternalServerError)
-		} else {
-			w.WriteHeader(http.StatusOK)
-			w.Write(responseData)
-		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(totalResponseData)
 	} else {
 		// We are getting a document
 
@@ -170,7 +179,7 @@ func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
 				w.Write(responseData)
 			}
 		} else {
-			http.Error(w, "Document does not exist", http.StatusBadRequest)
+			http.Error(w, "Document does not exist", http.StatusNotFound)
 		}
 	}
 	return
@@ -182,6 +191,10 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	if len(pathParts) > 0 && pathParts[0] == "v1" {
+		pathParts = pathParts[1:]
 	}
 
 	// Invalid if path is empty
@@ -203,19 +216,27 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 
 		// If the database doesn't exist, create a new one
 		if databaseExists {
-			http.Error(w, "Database already exists", http.StatusConflict)
+			http.Error(w, "Database already exists", http.StatusBadRequest)
 		} else {
 			ds.databases[databaseName] = &Collection{
 				documents: make(map[string]*Document),
+				URI:       URIstruct{URI: "/v1/" + databaseName},
 			}
-			w.WriteHeader(http.StatusCreated) // Indicate that a new database was created
+			responseData, ok := json.Marshal(ds.databases[databaseName].URI)
+			if ok != nil {
+				http.Error(w, "Error marshaling", http.StatusInternalServerError)
+			} else {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				w.Write(responseData)
+			}
 		}
 	} else {
 		// We're dealing with a document
 		// Check that the database where the document will go exists
 		database, ok := ds.databases[pathParts[0]]
 		if !ok {
-			http.Error(w, "Invalid Database", http.StatusNotFound)
+			http.Error(w, "Invalid Database", http.StatusBadRequest)
 			return
 		}
 
@@ -229,16 +250,25 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 
 		// We're dealing with a document
 		database.documents[pathParts[1]] = &Document{
-			data:        body,
-			collections: make(map[string]*Collection),
-			metadata: Metadata{
+			Name:        "/" + pathParts[1],
+			Data:        body,
+			Collections: make(map[string]*Collection),
+			Metadata: Metadata{
 				createdBy:      "server",
 				createdAt:      time.Now(),
 				lastModifiedBy: "server",
 				lastModifiedAt: time.Now(),
 			},
+			URI: URIstruct{URI: "/v1" + database.name + "/" + pathParts[1]},
 		}
-		w.WriteHeader(http.StatusCreated) // Indicate that a new document was created
+		responseData, marshalOK := json.Marshal(database.documents[pathParts[1]].URI)
+		if marshalOK != nil {
+			http.Error(w, "Error marshaling", http.StatusInternalServerError)
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			w.Write(responseData)
+		}
 	}
 	return
 }

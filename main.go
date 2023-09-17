@@ -219,6 +219,7 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Database already exists", http.StatusBadRequest)
 		} else {
 			ds.databases[databaseName] = &Collection{
+				name:      databaseName,
 				documents: make(map[string]*Document),
 				URI:       URIstruct{URI: "/v1/" + databaseName},
 			}
@@ -259,7 +260,7 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 				lastModifiedBy: "server",
 				lastModifiedAt: time.Now(),
 			},
-			URI: URIstruct{URI: "/v1" + database.name + "/" + pathParts[1]},
+			URI: URIstruct{URI: "/v1/" + database.name + "/" + pathParts[1]},
 		}
 		responseData, marshalOK := json.Marshal(database.documents[pathParts[1]].URI)
 		if marshalOK != nil {

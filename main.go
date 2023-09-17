@@ -54,9 +54,14 @@ func main() {
 
 	// Set port as defined at -p, with default port 3318
 	portPtr := flag.Int("p", 3318, "port on which the server will listen")
+	schemaPtr := flag.String("s", "", "schema file")
+	tokenPtr := flag.String("t", "", "token file")
 	flag.Parse()
 
 	port = *portPtr
+	// Accept -s and -t flags but ignore them for now
+	_ = schemaPtr
+	_ = tokenPtr
 
 	// Set server address based on port
 	server.Addr = ":" + fmt.Sprintf("%d", port)

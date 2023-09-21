@@ -1,9 +1,29 @@
-Emerson:
-    work on processing command line arguments
-    check JSON validity
-Logan:
-    Database/document structure
-    Methods (get/put)
-Brian:
-    Design/Architecture
-    Document structure
+Meeting 1: 9/7
+    Emerson:
+        work on processing command line arguments
+        check JSON validity
+    Logan:
+        Database/document structure
+        Methods (get/put)
+    Brian:
+        Design/Architecture
+        Document structure
+
+Meeting 2: 9/14
+    Emerson:
+        Work on Get/Put Methods
+    Logan:
+        Handler functionality and document structure
+    Brian:
+        Testing
+
+Meeting 3: 9/17
+    Emerson/Logan finished check-in
+
+Meeting 4: 9/21
+    Emerson:
+        HTTP Methods Post, Delete, Patch, Options
+    Logan:
+        Authorization
+    Brian:
+        Authentication

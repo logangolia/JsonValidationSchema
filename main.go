@@ -4,50 +4,15 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
+	"main/handler"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
-	"strings"
-	"sync"
 	"syscall"
-	"time"
 )
-
-type DatabaseService struct {
-	mu        sync.Mutex
-	databases map[string]*Collection
-}
-
-type Document struct {
-	Name        string `json:"path"`
-	Data        []byte `json:"doc"`
-	Collections map[string]*Collection
-	Metadata    Metadata `json:"meta"`
-	URI         URIstruct
-}
-
-type Collection struct {
-	name      string               `json:"-"`
-	documents map[string]*Document `json:"-"`
-	URI       URIstruct
-}
-
-type Metadata struct {
-	createdBy      string
-	createdAt      time.Time
-	lastModifiedBy string
-	lastModifiedAt time.Time
-}
-
-type URIstruct struct {
-	URI string `json:"uri"`
-}
 
 // "github.com/santhosh-tekuri/jsonschema/v5/httploader"
 
@@ -73,7 +38,7 @@ func main() {
 	server.Addr = ":" + fmt.Sprintf("%d", port)
 
 	// Assign the handler to the server
-	server.Handler = NewHandler()
+	server.Handler = handler.NewHandler()
 
 	// The following code should go last and remain unchanged.
 	// Note that you must actually initialize 'server' and 'port'
@@ -96,201 +61,4 @@ func main() {
 	} else {
 		slog.Info("Server closed", "error", err)
 	}
-}
-
-func NewHandler() http.Handler {
-	// Create server mux
-	mux := http.NewServeMux()
-
-	// Create new highest-level database, a DatabaseService
-	dbService := &DatabaseService{
-		databases: make(map[string]*Collection),
-	}
-
-	// One HandleFunc with switch cases for Get/Put
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			dbService.HandleGet(w, r)
-		case http.MethodPut:
-			dbService.HandlePut(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	return mux
-}
-
-func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
-	// Get the parts of the path from splitPath
-	pathParts, err := splitPath(r.URL.Path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if len(pathParts) > 0 && pathParts[0] == "v1" {
-		pathParts = pathParts[1:]
-	}
-
-	// If the path is empty it is invalid
-	if len(pathParts) == 0 {
-		http.Error(w, "Empty Path", http.StatusBadRequest)
-		return
-	}
-
-	// Lock for the rest of the func
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-
-	// Check if the database exists
-	database, dbExists := ds.databases[pathParts[0]]
-	if !dbExists {
-		http.Error(w, "Database does not exist", http.StatusNotFound)
-	}
-
-	if len(pathParts) == 1 {
-		// We are getting a database
-
-		// Loop through all the documents in the database to marshall and write
-		totalResponseData := make([]byte, 0)
-		for _, document := range database.documents {
-			responseData, ok := json.Marshal(document)
-			if ok != nil {
-				http.Error(w, "Error marshaling", http.StatusInternalServerError)
-			}
-			totalResponseData = append(totalResponseData, responseData...)
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write(totalResponseData)
-	} else {
-		// We are getting a document
-
-		// Check if the document exists
-		document, documentExists := database.documents[pathParts[1]]
-		if documentExists {
-			// Marshall and write the document
-			responseData, ok := json.Marshal(document)
-			if ok != nil {
-				http.Error(w, "Error marshaling", http.StatusInternalServerError)
-			} else {
-				w.WriteHeader(http.StatusOK)
-				w.Write(responseData)
-			}
-		} else {
-			http.Error(w, "Document does not exist", http.StatusNotFound)
-		}
-	}
-	return
-}
-
-func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
-	// Get the parts of the path from splitPath
-	pathParts, err := splitPath(r.URL.Path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if len(pathParts) > 0 && pathParts[0] == "v1" {
-		pathParts = pathParts[1:]
-	}
-
-	// Invalid if path is empty
-	if len(pathParts) == 0 {
-		http.Error(w, "Empty Path", http.StatusBadRequest)
-		return
-	}
-
-	// Lock for the rest of the func
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-
-	if len(pathParts) == 1 {
-		// We're dealing with a database
-		databaseName := pathParts[0]
-
-		// Check if the databaseName already exists in ds.databases
-		_, databaseExists := ds.databases[databaseName]
-
-		// If the database doesn't exist, create a new one
-		if databaseExists {
-			http.Error(w, "Database already exists", http.StatusBadRequest)
-		} else {
-			ds.databases[databaseName] = &Collection{
-				name:      databaseName,
-				documents: make(map[string]*Document),
-				URI:       URIstruct{URI: "/v1/" + databaseName},
-			}
-			responseData, ok := json.Marshal(ds.databases[databaseName].URI)
-			if ok != nil {
-				http.Error(w, "Error marshaling", http.StatusInternalServerError)
-			} else {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusCreated)
-				w.Write(responseData)
-			}
-		}
-	} else {
-		// We're dealing with a document
-		// Check that the database where the document will go exists
-		database, ok := ds.databases[pathParts[0]]
-		if !ok {
-			http.Error(w, "Invalid Database", http.StatusBadRequest)
-			return
-		}
-
-		// Read the body of the message
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-			return
-		}
-		defer r.Body.Close()
-
-		// We're dealing with a document
-		database.documents[pathParts[1]] = &Document{
-			Name:        "/" + pathParts[1],
-			Data:        body,
-			Collections: make(map[string]*Collection),
-			Metadata: Metadata{
-				createdBy:      "server",
-				createdAt:      time.Now(),
-				lastModifiedBy: "server",
-				lastModifiedAt: time.Now(),
-			},
-			URI: URIstruct{URI: "/v1/" + database.name + "/" + pathParts[1]},
-		}
-		responseData, marshalOK := json.Marshal(database.documents[pathParts[1]].URI)
-		if marshalOK != nil {
-			http.Error(w, "Error marshaling", http.StatusInternalServerError)
-		} else {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			w.Write(responseData)
-		}
-	}
-	return
-}
-
-// splitPath splits the given path into its components.
-func splitPath(path string) ([]string, error) {
-	// Remove leading and trailing slashes if they exist.
-	trimmedPath := strings.Trim(path, "/")
-
-	// Split the path by slashes.
-	parts := strings.Split(trimmedPath, "/")
-
-	// Loop over parts to translate percent-encoded characters.
-	for i, part := range parts {
-		decodedPart, err := url.QueryUnescape(part)
-		if err != nil {
-			return nil, fmt.Errorf("Error decoding path part: %s", err)
-		}
-		parts[i] = decodedPart
-	}
-
-	// The returned slice removes the leading and trailing slashes and decodes any percent-encoded values.
-	return parts, nil
 }

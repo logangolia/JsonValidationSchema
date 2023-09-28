@@ -27,3 +27,15 @@ Meeting 4: 9/21
         Authorization
     Brian:
         Authentication
+
+Meeting 5: 9/28
+    Emerson:
+        Expand methods to take in full path
+        JSON Validation
+        Testing on HTTP Methods
+    Logan:
+        Authorization/Authentication - finish and test
+        Create user strucuts
+    Brian:
+        Testing
+        Subscribe to changes

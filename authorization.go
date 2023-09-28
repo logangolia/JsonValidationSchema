@@ -1,8 +1,8 @@
 // Or should userList map username to UserStruct then store all the user + token info in UserStruct?
 
-package authorization // Define the package name
+package authorization 
 
-// Import required packages
+
 import (
 	"fmt"
 	"math/rand"

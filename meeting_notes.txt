@@ -39,3 +39,15 @@ Meeting 5: 9/28
     Brian:
         Testing
         Subscribe to changes
+        
+Meeting 6: 10/2
+    Emerson:
+        PATCH method
+        skiplists
+    Logan:
+        Authorization
+        JSON Validation
+    Brian:
+        Subscribe to changes
+        Testing
+        

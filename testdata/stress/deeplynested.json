@@ -1,0 +1,26 @@
+{
+    "layer1":{
+        "layer2":{
+            "layer3":{
+                "layer4":{
+                    "layer5":{
+                        "layer6":{
+                            "layer7":{
+                                "layer8":{
+                                    "layer9":{
+                                        "layer10":{
+                                            "val1": 1,
+                                            "val2": "s1",
+                                            "val3": [1, 2, 3],
+                                            "val4": {"f1": 1, "f2": "s1"}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

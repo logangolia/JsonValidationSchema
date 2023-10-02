@@ -1,0 +1,7 @@
+{
+    "intval": 3765666994,
+    "stringval": "The quick brown fox jumped over the lazy dog.",
+    "arrayobj": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+    "mixedarray": [1, "Hello", 2, true, "World", false, false, "!"],
+    "obj": {"name": "John", "salary": 120000, "HTML5": true}
+}

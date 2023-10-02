@@ -1,0 +1,36 @@
+this is a json file which does not
+follow the json format at all. It is just some writing.
+Here are a lot of special characters: !)(@*^(*!@|{}:>":"))
+
+Here are some numbers: 12483258427958319009
+
+Heres' a random string: djcbsvbfjsazdvmiaohdippcalkcxlak
+
+And here's some valid JSON format!
+
+{
+    "intlist": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+    ]
+}
+
+Here's some more random text.

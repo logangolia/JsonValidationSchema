@@ -1,0 +1,37 @@
+{
+    "Rock": {
+        "Paramore": {
+            "founding-date": 2004,
+            "vocalist": {"name":"Hayley Williams", "age": 34, "labels": ["Fueled By Ramen", "Atlantic"]},
+            "guitarist": {"name": "Taylor York", "age": 33, "labels": ["Fueled By Ramen", "Atlantic"]},
+            "drummer": {"name": "Zac Farro", "age": 33, "labels": ["Fueled By Ramen", "Atlantic"]},
+            "active": true
+        },
+        "Led Zeppelin": {
+            "founding-date": 1968,
+            "vocalist": {"name": "Robert Plant", "age": 75, "labels": ["Atlantic", "Universal", "Sanctuary"]},
+            "guitarist": {"name": "Jimmy Page", "age": 79, "labels": ["Swan Song", "Atlantic", "Geffen"]},
+            "keyboardist": {"name": "John Paul Jones", "age": 77, "labels": ["Discipline Global", "Atlantic", "Swan Song"] },
+            "drummer": {"name": "John Bonham", "age": null, "labels": ["Atlantic", "Swan Song"]},
+            "active": false
+        },
+        "Metallica": {
+            "founding-date": 1981,
+            "vocalist": {"name": "James Hetfield", "age": 60, "labels": ["Megaforce", "Elektra", "Vertigo", "Warner Bros."]},
+            "guitarist": {"name": "Kirk Hammett", "age":  60, "labels": ["Elektra", "Vertigo", "Warner Bros."]},
+            "bassist": {"name": "Robert Trujilio", "age": 58, "labels": ["Warner Bros.", "Blackened"]},
+            "drummer": {"name": "Lars Ulrich", "age": 59, "labels": ["Megaforce", "Elektra", "Vertigo", "Warner Bros."]},
+            "active": true
+        }
+    },
+    "Indie": {
+        "The Backseat Lovers":{
+            "founding-date": 2018,
+            "vocalist": {"name": "Joshua Harmon", "age": 22, "labels": ["Capitol Records"]},
+            "guitarist": {"name": "Jonas Swanson", "age": 21, "labels": ["Capitol Records"]},
+            "bassist": {"name": "Ethan Christensen", "age": 23, "labels": ["Capitol Records"]},
+            "drummer": {"name": "Juice Welch", "age": 24, "labels": ["Capitol Records"]},
+            "active": true
+        }
+    }
+}

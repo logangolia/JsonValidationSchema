@@ -1,8 +1,9 @@
 package handler
 
 import (
-	"main/database"
 	"net/http"
+
+	"github.com/RICE-COMP318-FALL23/owldb-p1group37/database"
 )
 
 func NewHandler() http.Handler {

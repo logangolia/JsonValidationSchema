@@ -7,11 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"main/handler"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/RICE-COMP318-FALL23/owldb-p1group37/handler"
 )
 
 // "github.com/santhosh-tekuri/jsonschema/v5/httploader"

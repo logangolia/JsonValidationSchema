@@ -4,44 +4,41 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skiplist"
 )
 
+// The Document struct represents a document in a database.
 type Document struct {
 	Name        string `json:"path"`
 	Data        []byte `json:"doc"`
-	Collections map[string]*Collection
+	Collections *skiplist.SkipList
 	Metadata    Metadata `json:"meta"`
 	URI         string   `json:"uri"`
 }
 
-type Metadata struct {
-	CreatedBy      string
-	CreatedAt      time.Time
-	LastModifiedBy string
-	LastModifiedAt time.Time
-}
-
+// NewDocument creates and returns a new Document struct based on the inputs.
 func NewDocument(name string, data []byte, user string, time time.Time, uriPrefix string) *Document {
 	return &Document{
 		Name:        name,
 		Data:        data,
-		Collections: make(map[string]*Collection),
+		Collections: skiplist.NewSkipList(),
 		Metadata:    *NewMetadata(user, time),
 		URI:         uriPrefix + name,
 	}
 }
 
-func NewMetadata(user string, time time.Time) *Metadata {
-	return &Metadata{
-		CreatedBy:      "server",
-		CreatedAt:      time,
-		LastModifiedBy: "server",
-		LastModifiedAt: time,
-	}
+// GetChildByName implements the function from the PathItem interface.
+// If it exists, it returns the collection and true, otherwise nil and false.
+func (d *Document) GetChildByName(name string) (PathItem, bool) {
+	child, exists := d.Collections.Find(name)
+	return child, exists
 }
 
-func marshalDocument(document *Document) ([]byte, error) {
-	response, err := json.Marshal(document)
+// Marshal implements the function from the PathItem interface.
+// Calling Marshal() marshals and returns the document as well as an error.
+func (d *Document) Marshal() ([]byte, error) {
+	response, err := json.Marshal(d)
 	if err != nil {
 		return nil, fmt.Errorf("Error marshaling document: %w", err)
 	}

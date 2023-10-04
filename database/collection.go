@@ -2,33 +2,45 @@ package database
 
 import (
 	"encoding/json"
-	"fmt"
+
+	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skiplist"
 )
 
+// The Collection struct represents a collection in a database.
 type Collection struct {
-	Name      string               `json:"-"`
-	Documents map[string]*Document `json:"-"`
-	URI       string               `json:"uri"`
+	Name      string
+	Documents *skiplist.SkipList
+	URI       string `json:"uri"`
 }
 
+// NewCollection creates and returns a new Collection struct with the given name.
 func NewCollection(name string) *Collection {
 	return &Collection{
 		Name:      name,
-		Documents: make(map[string]*Document),
+		Documents: skiplist.NewSkipList(),
 		URI:       name,
 	}
 }
 
-func marshalCollection(collection *Collection) ([]byte, error) {
+// GetChildByName implements the function from the PathItem interface.
+// If it exists, it returns the document and true, otherwise nil and false.
+func (c *Collection) GetChildByName(name string) (PathItem, bool) {
+	child, exists := c.Documents.Find(name)
+	return child, exists
+}
+
+// Marshal implements the function from the PathItem interface.
+// Calling Marshal() marshals and returns the collection as well as an error.
+func (c *Collection) Marshal() ([]byte, error) {
 	response := make([]byte, 0)
 
-	for _, document := range collection.Documents {
-		documentData, err := json.Marshal(document)
+	c.Documents.ForEach(func(key string, value interface{}) { // Iterate over skip list
+		documentData, err := json.Marshal(value.(*Document)) // Type assert to *Document
 		if err != nil {
-			return nil, fmt.Errorf("Error marshaling document: %w", err)
+			return
 		}
 		response = append(response, documentData...)
-	}
+	})
 
 	return response, nil
 }

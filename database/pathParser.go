@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+// PathItem represents an item in the path (document or collection)
+// Used to efficiently loop through to a point in the path
+type PathItem interface {
+	GetChildByName(name string) (PathItem, bool)
+	Marshal() ([]byte, error)
+}
+
 // SplitPath splits the given path into its components.
 func splitPath(path string) ([]string, error) {
 	// Remove leading and trailing slashes if they exist.
@@ -23,6 +30,7 @@ func splitPath(path string) ([]string, error) {
 		parts[i] = decodedPart
 	}
 
+	// Remove the v1 from the path parts as we will not use it
 	if len(parts) > 0 && parts[0] == "v1" {
 		parts = parts[1:]
 	}

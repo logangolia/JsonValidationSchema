@@ -50,4 +50,13 @@ Meeting 6: 10/2
     Brian:
         Subscribe to changes
         Testing
-        
+
+Meeting 6: 10/5
+    Emerson:
+        Continue working on skip lists.
+    Logan:
+        Continue working on JSON validation.
+    Brian:
+        Work on PATCH method, increase volume of test suite over the weekend.
+
+Next meeting on Tuesday, we will sync up the packages.

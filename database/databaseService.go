@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skiplist"
+	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skipList"
 )
 
 // The DatabaseService struct represents the root of the database.
@@ -15,13 +15,13 @@ import (
 // It contains a method to address each of the HTTP methods.
 type DatabaseService struct {
 	mu          sync.Mutex
-	collections *skiplist.SkipList
+	collections *skipList.SkipList[string, Collection]
 }
 
 // NewDatabaseService creates and returns a new DatabaseService struct.
 func NewDatabaseService() *DatabaseService {
 	return &DatabaseService{
-		collections: skiplist.NewSkipList(),
+		collections: skipList.NewSkipList[string, Collection](),
 	}
 }
 

@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skiplist"
+	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skipList"
 )
 
 // The Document struct represents a document in a database.
 type Document struct {
 	Name        string `json:"path"`
 	Data        []byte `json:"doc"`
-	Collections *skiplist.SkipList
+	Collections *skipList.SkipList[string, Collection]
 	Metadata    Metadata `json:"meta"`
 	URI         string   `json:"uri"`
 }

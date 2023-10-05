@@ -1,7 +1,6 @@
 // Or should userList map username to UserStruct then store all the user + token info in UserStruct?
 
-package authorization 
-
+package authorization
 
 import (
 	"fmt"
@@ -37,11 +36,15 @@ type TokenInfo struct {
 }
 
 // Map to store token information
-var tokenStore = make(map[string]TokenInfo)
+var tokenStore = make(map[string]TokenInfo) // map token to TokenInfo struct (username + time)
 
 // HTTP handler function for authentication
 func authHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
+	case "OPTIONS":
+		// For the /auth endpoint, indicate that POST and DELETE are allowed.
+		w.Header().Set("Allow", "POST, DELETE")
+		w.WriteHeader(http.StatusOK)
 	case "POST": // Handle POST method for user authentication
 		username := r.URL.Query().Get("username") // Get username from the query parameter
 		if username == "" {
@@ -59,7 +62,8 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("Logged in. Token: %s", token)))
 
 	case "DELETE": // Handle DELETE method for user de-authentication
-		token := r.Header.Get("Authorization") // Get token from the Authorization header
+		token := r.Header.Get("Authorization")[7:] // to get the token after "Bearer "
+		// Get token from the Authorization header
 		if token == "" {
 			http.Error(w, "Token is required", http.StatusBadRequest) // Return error if token is missing
 			return
@@ -89,3 +93,7 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 
 // need this case in NewHandler() in main.go
 // http.HandleFunc("/auth", authorization.authHandler)  // Route /auth URL path to authHandler function if /auth in URL
+// need to do OPTIONS ad well
+// Use LOGGING
+// need to check for token expiration each time for all incoming requests with the token in the header
+// UserStruct with token and username

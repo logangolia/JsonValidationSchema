@@ -3,13 +3,13 @@ package database
 import (
 	"encoding/json"
 
-	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skiplist"
+	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skipList"
 )
 
 // The Collection struct represents a collection in a database.
 type Collection struct {
 	Name      string
-	Documents *skiplist.SkipList
+	Documents *skipList.SkipList[string, Document]
 	URI       string `json:"uri"`
 }
 
@@ -17,7 +17,7 @@ type Collection struct {
 func NewCollection(name string) *Collection {
 	return &Collection{
 		Name:      name,
-		Documents: skiplist.NewSkipList(),
+		Documents: skipList.NewSkipList[string, Document](),
 		URI:       name,
 	}
 }

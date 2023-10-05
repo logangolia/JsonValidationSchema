@@ -94,5 +94,6 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 // need this case in NewHandler() in main.go
 // http.HandleFunc("/auth", authorization.authHandler)  // Route /auth URL path to authHandler function if /auth in URL
 // need to do OPTIONS ad well
+// Use LOGGING
 // need to check for token expiration each time for all incoming requests with the token in the header
 // UserStruct with token and username

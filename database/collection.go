@@ -1,23 +1,21 @@
 package database
 
-import (
-	"encoding/json"
-
-	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skipList"
-)
+import "github.com/RICE-COMP318-FALL23/owldb-p1group37/skiplist"
 
 // The Collection struct represents a collection in a database.
 type Collection struct {
 	Name      string
-	Documents *skipList.SkipList[string, Document]
+	Documents skiplist.SkipList[string, Document]
 	URI       string `json:"uri"`
 }
 
 // NewCollection creates and returns a new Collection struct with the given name.
 func NewCollection(name string) *Collection {
+	minKey := "\x00" // Represents the minimum string key
+	maxKey := "\x7F" // Represents the maximum string key
 	return &Collection{
 		Name:      name,
-		Documents: skipList.NewSkipList[string, Document](),
+		Documents: skiplist.NewSkipList[string, Document](minKey, maxKey),
 		URI:       name,
 	}
 }
@@ -26,21 +24,15 @@ func NewCollection(name string) *Collection {
 // If it exists, it returns the document and true, otherwise nil and false.
 func (c *Collection) GetChildByName(name string) (PathItem, bool) {
 	child, exists := c.Documents.Find(name)
-	return child, exists
+	if exists {
+		return &child, true
+	}
+	return nil, false
 }
 
 // Marshal implements the function from the PathItem interface.
 // Calling Marshal() marshals and returns the collection as well as an error.
 func (c *Collection) Marshal() ([]byte, error) {
 	response := make([]byte, 0)
-
-	c.Documents.ForEach(func(key string, value interface{}) { // Iterate over skip list
-		documentData, err := json.Marshal(value.(*Document)) // Type assert to *Document
-		if err != nil {
-			return
-		}
-		response = append(response, documentData...)
-	})
-
 	return response, nil
 }

@@ -1,4 +1,4 @@
-package skipList
+package skiplist
 
 import (
 	"cmp"
@@ -18,25 +18,31 @@ type UpdateCheck[K cmp.Ordered, V any] func(key K, currValue V, exists bool) (ne
 
 // SkipList is an interface that defines the methods a skip list should implement.
 type SkipList[K cmp.Ordered, V any] interface {
+	Find(key K) (foundValue V, found bool)
 	Upsert(key K, check UpdateCheck[K, V]) (updated bool, err error)
 	Remove(key K) (removedValue V, removed bool)
-	Find(key K) (foundValue V, found bool)
 	Query(ctx context.Context, start K, end K) (results []Node[K, V], err error)
 }
 
 // SkipListImpl is the concrete implementation of the SkipList interface.
 type SkipListImpl[K cmp.Ordered, V any] struct {
+	SkipList[K, V]
 	head  *Node[K, V] // Head node of the skip list.
 	tail  *Node[K, V] // Tail node of the skip list.
 	level int         // Current number of levels in the skip list.
 }
 
 // NewSkipList initializes and returns a new SkipListImpl.
-func NewSkipList[K cmp.Ordered, V any](minKey K, maxKey K) *SkipListImpl[K, V] {
+func NewSkipList[K cmp.Ordered, V any](minKey K, maxKey K) SkipList[K, V] {
 	var defaultV V
+	head := NewNode[K, V](minKey, defaultV)
+	tail := NewNode[K, V](maxKey, defaultV)
+	for i := 0; i <= maxLevel; i++ {
+		head.next[i] = tail
+	}
 	return &SkipListImpl[K, V]{
-		head: NewNode[K, V](minKey, defaultV, maxLevel),
-		tail: NewNode[K, V](maxKey, defaultV, maxLevel),
+		head: head,
+		tail: tail,
 	}
 }
 
@@ -92,10 +98,18 @@ func (sl *SkipListImpl[K, V]) Upsert(key K, check UpdateCheck[K, V]) (bool, erro
 			found := succs[levelFound]
 			checkValue = found.value
 			if !found.marked {
-				// Adding node wait for other operation
+				// Adding node, wait for other operation
 				for !found.fullyLinked {
 				}
 				return false, nil
+			} else {
+				// Update
+				value, err := check(key, checkValue, levelFound != -1)
+				if err != nil {
+					return false, err
+				}
+				found.value = value
+				break
 			}
 		}
 		value, err := check(key, checkValue, levelFound != -1)
@@ -126,7 +140,7 @@ func (sl *SkipListImpl[K, V]) Upsert(key K, check UpdateCheck[K, V]) (bool, erro
 			}
 		}
 		// Insert new node
-		node := NewNode(key, value, topLevel)
+		node := NewNode(key, value)
 
 		// Set pointers
 		level = 0
@@ -230,28 +244,8 @@ func (sl *SkipListImpl[K, V]) randomLevel() int {
 	return lvl
 }
 
-// // Query returns all elements in the skip list (in order) with keys between start and end inclusive.
-// func (sl *SkipListImpl[K, V]) Query(ctx context.Context, start K, end K) ([]Node[K, V], error) {
-// 	sl.mu.RLock()
-// 	defer sl.mu.RUnlock()
-
-// 	var results []Node[K, V]
-
-// 	current := sl.header.forward[0]
-// 	// Traverse the list to find the starting node for the query.
-// 	for current != nil && current.key < start {
-// 		current = current.forward[0]
-// 	}
-
-// 	// Traverse the list and collect all nodes between start and end keys.
-// 	for current != nil && current.key <= end {
-// 		select {
-// 		case <-ctx.Done(): // Check for context cancellation.
-// 			return nil, ctx.Err()
-// 		default:
-// 			results = append(results, Node[K, V]{Key: current.key, Value: current.value})
-// 			current = current.forward[0]
-// 		}
-// 	}
-// 	return results, nil
-// }
+// Query returns all elements in the skip list (in order) with keys between start and end inclusive.
+func (sl *SkipListImpl[K, V]) Query(ctx context.Context, start K, end K) ([]Node[K, V], error) {
+	var results []Node[K, V]
+	return results, nil
+}

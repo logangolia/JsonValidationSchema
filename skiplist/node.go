@@ -1,4 +1,4 @@
-package skipList
+package skiplist
 
 import (
 	"cmp"
@@ -16,12 +16,12 @@ type Node[K cmp.Ordered, V any] struct {
 	fullyLinked bool          // Has this node been fully added to the lists
 }
 
-func NewNode[K cmp.Ordered, V any](key K, value V, level int) *Node[K, V] {
+func NewNode[K cmp.Ordered, V any](key K, value V) *Node[K, V] {
 	return &Node[K, V]{
 		key:         key,
 		value:       value,
-		next:        make([]*Node[K, V], level),
-		topLevel:    level - 1, // Assuming level is 1-based; adjust if 0-based
+		next:        make([]*Node[K, V], maxLevel+1),
+		topLevel:    maxLevel,
 		marked:      false,
 		fullyLinked: false,
 	}

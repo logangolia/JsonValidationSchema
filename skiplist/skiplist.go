@@ -26,23 +26,28 @@ type SkipList[K cmp.Ordered, V any] interface {
 
 // SkipListImpl is the concrete implementation of the SkipList interface.
 type SkipListImpl[K cmp.Ordered, V any] struct {
-	SkipList[K, V]
-	head  *Node[K, V] // Head node of the skip list.
-	tail  *Node[K, V] // Tail node of the skip list.
-	level int         // Current number of levels in the skip list.
+	head *Node[K, V] // Head node of the skip list.
+	tail *Node[K, V] // Tail node of the skip list.
 }
 
 // NewSkipList initializes and returns a new SkipListImpl.
-func NewSkipList[K cmp.Ordered, V any](minKey K, maxKey K) SkipList[K, V] {
+func NewSkipList[K cmp.Ordered, V any]() SkipList[K, V] {
+	var defaultK K
 	var defaultV V
-	head := NewNode[K, V](minKey, defaultV)
-	tail := NewNode[K, V](maxKey, defaultV)
+	headNode := NewNode[K, V](defaultK, defaultV)
+	headNode.fullyLinked = true
+	headNode.isHead = true
+	tailNode := NewNode[K, V](defaultK, defaultV)
+	tailNode.fullyLinked = true
+	tailNode.isTail = true
+	// Make the head's next pointers point to the tail node for all levels
 	for i := 0; i <= maxLevel; i++ {
-		head.next[i] = tail
+		headNode.next[i] = tailNode
 	}
+
 	return &SkipListImpl[K, V]{
-		head: head,
-		tail: tail,
+		head: headNode,
+		tail: tailNode,
 	}
 }
 
@@ -52,12 +57,15 @@ func NewSkipList[K cmp.Ordered, V any](minKey K, maxKey K) SkipList[K, V] {
 func (sl *SkipListImpl[K, V]) Find(key K) (V, bool) {
 	levelFound, _, succs := sl.findHelper(key)
 
+	// If the key was not found, return an empty V and false
 	if levelFound == -1 {
 		var defaultV V
 		return defaultV, false
 	}
 
+	// If the key was found it is stored in succs at the level
 	found := succs[levelFound]
+	// Return the value and true iff the node is fullyLinked and not marked
 	return found.value, (found.fullyLinked && !found.marked)
 }
 
@@ -69,14 +77,19 @@ func (sl *SkipListImpl[K, V]) findHelper(key K) (int, []*Node[K, V], []*Node[K, 
 	preds := make([]*Node[K, V], maxLevel+1)
 	succs := make([]*Node[K, V], maxLevel+1)
 
+	// Starting from the maxLevel, traverse down and across the skiplist to the node
 	level := maxLevel
 	for level >= 0 {
 		curr := pred.next[level]
-		for key > curr.key {
+		// Continue until we reach the tail node or a key greater or equal to the desired key.
+		// We treat head nodes as if they have a key less than any key
+		// and tail nodes as if they have a key greater than any key.
+		for !curr.isTail && (curr.isHead || cmp.Compare(key, curr.key) > 0) {
 			pred = curr
 			curr = pred.next[level]
 		}
-		if foundLevel == -1 && key == curr.key {
+		// If this is the first time the key has been found, set the foundLevel to the current level
+		if foundLevel == -1 && cmp.Compare(key, curr.key) == 0 {
 			foundLevel = level
 		}
 		preds[level] = pred
@@ -88,80 +101,101 @@ func (sl *SkipListImpl[K, V]) findHelper(key K) (int, []*Node[K, V], []*Node[K, 
 
 // Upsert inserts or updates node in the skip list based on the provided check function.
 func (sl *SkipListImpl[K, V]) Upsert(key K, check UpdateCheck[K, V]) (bool, error) {
+	// Choose a random level as the topLevel to insert (for balancing)
 	topLevel := sl.randomLevel()
 
 	for true {
 		// Check if key is in the list
 		var checkValue V
 		levelFound, preds, succs := sl.findHelper(key)
+		// fmt.Println("preds:", preds)
+		// fmt.Println("succs:", succs)
+		// fmt.Println("foundLevel:", levelFound)
+		// If the key is in the list
 		if levelFound != -1 {
+			// fmt.Println("you shouldnt be here")
 			found := succs[levelFound]
 			checkValue = found.value
-			if !found.marked {
-				// Adding node, wait for other operation
+			if found.marked {
+				// Adding node, wait for other operation, and fail
 				for !found.fullyLinked {
 				}
 				return false, nil
 			} else {
-				// Update
-				value, err := check(key, checkValue, levelFound != -1)
+				// The node was found and is not inside another operation, so update it
+				value, err := check(key, checkValue, true)
 				if err != nil {
 					return false, err
 				}
+				found.mu.Lock()
 				found.value = value
-				break
+				found.mu.Unlock()
+				return true, nil
 			}
 		}
+		// fmt.Println("you should be here")
+		// Key was not found, so we have to Insert it
 		value, err := check(key, checkValue, levelFound != -1)
 		if err != nil {
 			return false, err
 		}
-
-		// Key not found so lock predecessor
+		// fmt.Println("value: ", value)
+		// Lock the predecessors
 		highestLocked := -1
 		valid := true
 		level := 0
-		// Lock preds
+		// Ascend the levels to the topLevel, checking that the location is suitable for insertion
+		// fmt.Println("topLevel: ", topLevel)
+		lastLockedNode := (*Node[K, V])(nil) // Initialize to nil. This will hold reference to the last node we locked.
 		for valid && level <= topLevel {
-			preds[level].mu.Lock()
+			pred := preds[level]
+			if pred != lastLockedNode {
+				pred.mu.Lock()
+				lastLockedNode = pred // Update the reference to the last locked node
+			}
 			highestLocked = level
-			// Check if pred/succ are valid
+			// Ensure the predecessor and successors are not marked for removal
 			unmarked := (!preds[level].marked && !succs[level].marked)
+			// Ensure there exists no node between the predecessor and successor to the inserted node
 			connected := (preds[level].next[level] == succs[level])
 			valid = unmarked && connected
 			level = level + 1
 		}
+		// fmt.Println("exited preds loop")
+		// If the location became invalid for any reason, unlock and restart
 		if !valid {
-			// Preds or succs changed, unlocked and try again
-			level = highestLocked
-			for level >= 0 {
+			for level := 0; level <= highestLocked; level++ {
 				preds[level].mu.Unlock()
-				level = level - 1
 			}
+			continue // Return to start of the loop
 		}
-		// Insert new node
+		// fmt.Println("made through valid check")
+		// Create node for insertion
 		node := NewNode(key, value)
+		node.mu.Lock()
+		node.topLevel = topLevel
 
-		// Set pointers
-		level = 0
-		for level <= topLevel {
-			node.next[level] = succs[level]
-			level = level + 1
-		}
-
-		// Add node to appropriate lists
+		// Set pointers of the inserted node
 		level = 0
 		for level <= topLevel {
 			preds[level].next[level] = node
+			node.next[level] = succs[level]
 			level = level + 1
 		}
+		// fmt.Println("set inserted pointers")
+		// Unlock preds and inserted node
 		node.fullyLinked = true
 		level = highestLocked
+		lastUnlockedNode := (*Node[K, V])(nil) // Initialize to nil. This will hold reference to the last node we unlocked.
 		for level >= 0 {
-			preds[level].mu.Unlock()
+			if preds[level] != lastUnlockedNode {
+				preds[level].mu.Unlock()
+				lastUnlockedNode = preds[level] // Update the reference to the last unlocked node
+			}
 			level = level - 1
 		}
-
+		node.mu.Unlock()
+		// fmt.Println("return?")
 		return true, nil
 	}
 	return true, nil
@@ -173,61 +207,79 @@ func (sl *SkipListImpl[K, V]) Remove(key K) (V, bool) {
 	var victim *Node[K, V]
 	isMarked := false
 	topLevel := -1
+
 	for true {
+		// Find the key for removal
 		levelFound, preds, succs := sl.findHelper(key)
 		if levelFound != -1 {
 			victim = succs[levelFound]
 		}
+
+		// First iteration
 		if !isMarked {
+			// Check if the node was not found, it was fullyLinked, it was marked
+			// or the topLevel doesn't match the level it was found on
 			if levelFound == -1 || !victim.fullyLinked ||
 				victim.marked || victim.topLevel != levelFound {
 				return defaultV, false
 			}
+
 			topLevel = victim.topLevel
 			victim.mu.Lock()
 			if victim.marked {
-				// Another remove call is operating on the node
+				// Another remove call beat us
 				victim.mu.Unlock()
 				return defaultV, false
 			}
+			// This remove call controls the node
 			victim.marked = true
 			isMarked = true
 		}
-
-		// Victim is locked and marked
+		// Lock the predecessors
 		highestLocked := -1
 		level := 0
 		valid := true
-		for valid && (level <= topLevel) {
+		// Ascend the levels, locking the predecessor and
+		// Ensuring the predecessor is not marked for removal, and the successor is the victim
+		lastLockedNode := (*Node[K, V])(nil) // Initialize to nil. This will hold reference to the last node we locked.
+		for valid && level <= topLevel {
 			pred := preds[level]
-			pred.mu.Lock()
+			if pred != lastLockedNode {
+				pred.mu.Lock()
+				lastLockedNode = pred // Update the reference to the last locked node
+			}
 			highestLocked = level
-			successor := (pred.next[level] == victim)
-			valid = (!pred.marked && successor)
+			validSuccessor := (pred.next[level] == victim)
+			valid = (!pred.marked && validSuccessor)
 			level = level + 1
 		}
 
+		// If the removal was not valid for any reason, unlock locked predecessors and try again
 		if !valid {
 			level = highestLocked
 			for level >= 0 {
 				preds[level].mu.Unlock()
 				level = level - 1
 			}
-			// Preds changed, try again
+			// Victim remains locked as this removal has ownership
 			continue
 		}
 
-		// All preds locked and valid
+		// All preds locked and valid, unlink the nodes
 		level = topLevel
 		for level >= 0 {
 			preds[level].next[level] = victim.next[level]
 			level = level - 1
 		}
 
+		// Unlock the victim and the predecessors
 		victim.mu.Unlock()
-		level = highestLocked
+		lastUnlockedNode := (*Node[K, V])(nil) // Initialize to nil. This will hold reference to the last node we unlocked.
 		for level >= 0 {
-			preds[level].mu.Unlock()
+			if preds[level] != lastUnlockedNode {
+				preds[level].mu.Unlock()
+				lastUnlockedNode = preds[level] // Update the reference to the last unlocked node
+			}
 			level = level - 1
 		}
 		return victim.value, true

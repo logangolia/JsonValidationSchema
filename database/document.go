@@ -19,12 +19,10 @@ type Document struct {
 
 // NewDocument creates and returns a new Document struct based on the inputs.
 func NewDocument(name string, data []byte, user string, time time.Time, uriPrefix string) *Document {
-	minKey := "\x00" // Represents the minimum string key
-	maxKey := "\x7F" // Represents the maximum string key
 	return &Document{
 		Name:        name,
 		Data:        data,
-		Collections: skiplist.NewSkipList[string, Collection](minKey, maxKey),
+		Collections: skiplist.NewSkipList[string, Collection](),
 		Metadata:    *NewMetadata(user, time),
 		URI:         uriPrefix + name,
 	}

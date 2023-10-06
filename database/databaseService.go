@@ -26,10 +26,8 @@ func SetOrUpdate[K cmp.Ordered, V any](key K, currValue V, exists bool) (newValu
 
 // NewDatabaseService creates and returns a new DatabaseService struct.
 func NewDatabaseService() *DatabaseService {
-	minKey := "\x00" // Represents the minimum string key
-	maxKey := "\x7F" // Represents the maximum string key
 	return &DatabaseService{
-		collections: skiplist.NewSkipList[string, Collection](minKey, maxKey),
+		collections: skiplist.NewSkipList[string, Collection](),
 	}
 }
 

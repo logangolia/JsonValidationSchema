@@ -14,6 +14,8 @@ type Node[K cmp.Ordered, V any] struct {
 	next        []*Node[K, V] // Slice of next pointers at each level
 	marked      bool          // Is the node marked for removal
 	fullyLinked bool          // Has this node been fully added to the lists
+	isHead      bool          // Marker if this is the head of the skiplist
+	isTail      bool          // Marker if this is the tail of the skiplist
 }
 
 func NewNode[K cmp.Ordered, V any](key K, value V) *Node[K, V] {
@@ -24,5 +26,7 @@ func NewNode[K cmp.Ordered, V any](key K, value V) *Node[K, V] {
 		topLevel:    maxLevel,
 		marked:      false,
 		fullyLinked: false,
+		isHead:      false,
+		isTail:      false,
 	}
 }

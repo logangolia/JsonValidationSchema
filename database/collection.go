@@ -11,11 +11,9 @@ type Collection struct {
 
 // NewCollection creates and returns a new Collection struct with the given name.
 func NewCollection(name string) *Collection {
-	minKey := "\x00" // Represents the minimum string key
-	maxKey := "\x7F" // Represents the maximum string key
 	return &Collection{
 		Name:      name,
-		Documents: skiplist.NewSkipList[string, Document](minKey, maxKey),
+		Documents: skiplist.NewSkipList[string, Document](),
 		URI:       name,
 	}
 }

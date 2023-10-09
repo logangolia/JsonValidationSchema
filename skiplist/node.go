@@ -10,6 +10,7 @@ type Node[K cmp.Ordered, V any] struct {
 	mu          sync.Mutex
 	key         K
 	value       V
+	Pair        Pair[K, V]
 	topLevel    int           // Highest level list that contains this node
 	next        []*Node[K, V] // Slice of next pointers at each level
 	marked      bool          // Is the node marked for removal
@@ -22,6 +23,7 @@ func NewNode[K cmp.Ordered, V any](key K, value V) *Node[K, V] {
 	return &Node[K, V]{
 		key:         key,
 		value:       value,
+		Pair:        Pair[K, V]{Key: key, Value: value},
 		next:        make([]*Node[K, V], maxLevel+1),
 		topLevel:    maxLevel,
 		marked:      false,

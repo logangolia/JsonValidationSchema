@@ -18,36 +18,44 @@ type UpdateCheck[K cmp.Ordered, V any] func(key K, currValue V, exists bool) (ne
 
 // SkipList is an interface that defines the methods a skip list should implement.
 type SkipList[K cmp.Ordered, V any] interface {
-	Find(key K) (foundValue V, found bool)
 	Upsert(key K, check UpdateCheck[K, V]) (updated bool, err error)
 	Remove(key K) (removedValue V, removed bool)
-	Query(ctx context.Context, start K, end K) (results []Node[K, V], err error)
+	Find(key K) (foundValue V, found bool)
+	Query(ctx context.Context, start K, end K) (results []Pair[K, V], err error)
+}
+
+// Pair is a type that holds a key K and a value V.
+type Pair[K cmp.Ordered, V any] struct {
+	Key   K
+	Value V
 }
 
 // SkipListImpl is the concrete implementation of the SkipList interface.
 type SkipListImpl[K cmp.Ordered, V any] struct {
-	head *Node[K, V] // Head node of the skip list.
-	tail *Node[K, V] // Tail node of the skip list.
+	Head *Node[K, V] // Head node of the skip list.
+	Tail *Node[K, V] // Tail node of the skip list.
 }
 
 // NewSkipList initializes and returns a new SkipListImpl.
 func NewSkipList[K cmp.Ordered, V any]() SkipList[K, V] {
 	var defaultK K
 	var defaultV V
+	// Initalize the head node
 	headNode := NewNode[K, V](defaultK, defaultV)
 	headNode.fullyLinked = true
 	headNode.isHead = true
+	// Initialize the tail node
 	tailNode := NewNode[K, V](defaultK, defaultV)
 	tailNode.fullyLinked = true
 	tailNode.isTail = true
-	// Make the head's next pointers point to the tail node for all levels
+	// Set the head's next pointers point to the tail node for all levels
 	for i := 0; i <= maxLevel; i++ {
 		headNode.next[i] = tailNode
 	}
 
 	return &SkipListImpl[K, V]{
-		head: headNode,
-		tail: tailNode,
+		Head: headNode,
+		Tail: tailNode,
 	}
 }
 
@@ -72,7 +80,7 @@ func (sl *SkipListImpl[K, V]) Find(key K) (V, bool) {
 // findHelper finds the level, predecessors, and successors to a given key
 func (sl *SkipListImpl[K, V]) findHelper(key K) (int, []*Node[K, V], []*Node[K, V]) {
 	foundLevel := -1
-	pred := sl.head
+	pred := sl.Head
 
 	preds := make([]*Node[K, V], maxLevel+1)
 	succs := make([]*Node[K, V], maxLevel+1)
@@ -108,12 +116,8 @@ func (sl *SkipListImpl[K, V]) Upsert(key K, check UpdateCheck[K, V]) (bool, erro
 		// Check if key is in the list
 		var checkValue V
 		levelFound, preds, succs := sl.findHelper(key)
-		// fmt.Println("preds:", preds)
-		// fmt.Println("succs:", succs)
-		// fmt.Println("foundLevel:", levelFound)
 		// If the key is in the list
 		if levelFound != -1 {
-			// fmt.Println("you shouldnt be here")
 			found := succs[levelFound]
 			checkValue = found.value
 			if found.marked {
@@ -133,19 +137,16 @@ func (sl *SkipListImpl[K, V]) Upsert(key K, check UpdateCheck[K, V]) (bool, erro
 				return true, nil
 			}
 		}
-		// fmt.Println("you should be here")
 		// Key was not found, so we have to Insert it
 		value, err := check(key, checkValue, levelFound != -1)
 		if err != nil {
 			return false, err
 		}
-		// fmt.Println("value: ", value)
 		// Lock the predecessors
 		highestLocked := -1
 		valid := true
 		level := 0
 		// Ascend the levels to the topLevel, checking that the location is suitable for insertion
-		// fmt.Println("topLevel: ", topLevel)
 		lastLockedNode := (*Node[K, V])(nil) // Initialize to nil. This will hold reference to the last node we locked.
 		for valid && level <= topLevel {
 			pred := preds[level]
@@ -161,7 +162,6 @@ func (sl *SkipListImpl[K, V]) Upsert(key K, check UpdateCheck[K, V]) (bool, erro
 			valid = unmarked && connected
 			level = level + 1
 		}
-		// fmt.Println("exited preds loop")
 		// If the location became invalid for any reason, unlock and restart
 		if !valid {
 			for level := 0; level <= highestLocked; level++ {
@@ -169,7 +169,6 @@ func (sl *SkipListImpl[K, V]) Upsert(key K, check UpdateCheck[K, V]) (bool, erro
 			}
 			continue // Return to start of the loop
 		}
-		// fmt.Println("made through valid check")
 		// Create node for insertion
 		node := NewNode(key, value)
 		node.mu.Lock()
@@ -182,7 +181,6 @@ func (sl *SkipListImpl[K, V]) Upsert(key K, check UpdateCheck[K, V]) (bool, erro
 			node.next[level] = succs[level]
 			level = level + 1
 		}
-		// fmt.Println("set inserted pointers")
 		// Unlock preds and inserted node
 		node.fullyLinked = true
 		level = highestLocked
@@ -195,7 +193,6 @@ func (sl *SkipListImpl[K, V]) Upsert(key K, check UpdateCheck[K, V]) (bool, erro
 			level = level - 1
 		}
 		node.mu.Unlock()
-		// fmt.Println("return?")
 		return true, nil
 	}
 	return true, nil
@@ -290,6 +287,7 @@ func (sl *SkipListImpl[K, V]) Remove(key K) (V, bool) {
 // randomLevel generates a random level for a new node.
 func (sl *SkipListImpl[K, V]) randomLevel() int {
 	lvl := 1
+	// Calc a random level based on probability that is less than the maxLevel
 	for rand.Float64() < probability && lvl < maxLevel {
 		lvl++
 	}
@@ -297,7 +295,40 @@ func (sl *SkipListImpl[K, V]) randomLevel() int {
 }
 
 // Query returns all elements in the skip list (in order) with keys between start and end inclusive.
-func (sl *SkipListImpl[K, V]) Query(ctx context.Context, start K, end K) ([]Node[K, V], error) {
-	var results []Node[K, V]
+func (sl *SkipListImpl[K, V]) Query(ctx context.Context, start K, end K) ([]Pair[K, V], error) {
+	// Get the first node in the Query.
+	_, _, firstNodeSuccs := sl.findHelper(start)
+	loopNode := firstNodeSuccs[0]
+
+	// Get the last node in the Query.
+	_, lastNodePreds, lastNodeSuccs := sl.findHelper(end)
+	var lastNode *Node[K, V]
+	if lastNodeSuccs[0] != nil {
+		lastNode = lastNodeSuccs[0]
+	} else {
+		lastNode = lastNodePreds[0]
+	}
+
+	// Loop through the nodes from the start to end node, appending them to results.
+	var results []Pair[K, V]
+	for loopNode != lastNode && !loopNode.isTail {
+		// Check the context's Done channel to see if the operation should be terminated.
+		select {
+		case <-ctx.Done():
+			// The operation has been canceled or exceeded its timeout.
+			return nil, ctx.Err()
+		default:
+			// No cancellation or timeout, continue with the operation.
+		}
+		pair := Pair[K, V]{Key: loopNode.key, Value: loopNode.value}
+		results = append(results, pair)
+		loopNode = loopNode.next[0]
+	}
+	// Add the last node only if it is within range and not a tail node
+	if loopNode != sl.Tail && cmp.Compare(loopNode.key, end) <= 0 {
+		pair := Pair[K, V]{Key: loopNode.key, Value: loopNode.value}
+		results = append(results, pair)
+	}
+
 	return results, nil
 }

@@ -1,6 +1,7 @@
 package skiplist
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -196,5 +197,140 @@ func TestRemoveConcurrent(t *testing.T) {
 	}
 	if removedCount != 1 {
 		t.Fatalf("Expected only one removal to be successful, but got %v", removedCount)
+	}
+}
+
+func TestQueryEmptyList(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	ctx := context.TODO()
+
+	// Query on an empty list
+	startKey, endKey := 1, 10
+	results, err := sl.Query(ctx, startKey, endKey)
+
+	if err != nil {
+		t.Fatalf("Error during Query: %v", err)
+	}
+
+	if len(results) != 0 {
+		t.Errorf("Expected empty result, got %v", results)
+	}
+}
+
+func TestQueryWithSingleElement(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	ctx := context.TODO()
+
+	key, value := 5, "five"
+	sl.Upsert(key, func(k int, v string, exists bool) (string, error) {
+		return value, nil
+	})
+
+	// Query that should return the single element
+	startKey, endKey := 1, 10
+	results, err := sl.Query(ctx, startKey, endKey)
+
+	if err != nil {
+		t.Fatalf("Error during Query: %v", err)
+	}
+
+	if len(results) != 1 || results[0].Key != key || results[0].Value != value {
+		t.Errorf("Expected [%v], got %v", Pair[int, string]{Key: key, Value: value}, results)
+	}
+}
+
+func TestQueryInRange(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	ctx := context.TODO()
+
+	values := map[int]string{
+		1:  "one",
+		5:  "five",
+		10: "ten",
+		15: "fifteen",
+	}
+
+	for key, value := range values {
+		sl.Upsert(key, func(k int, v string, exists bool) (string, error) {
+			return value, nil
+		})
+	}
+
+	// Query that should return subset of elements
+	startKey, endKey := 5, 10
+	expectedResults := []Pair[int, string]{
+		{Key: 5, Value: "five"},
+		{Key: 10, Value: "ten"},
+	}
+
+	results, err := sl.Query(ctx, startKey, endKey)
+
+	if err != nil {
+		t.Fatalf("Error during Query: %v", err)
+	}
+
+	if len(results) != len(expectedResults) {
+		t.Errorf("Expected results of length %v, got %v", len(expectedResults), len(results))
+	}
+
+	for i, pair := range expectedResults {
+		if results[i] != pair {
+			t.Errorf("Expected %v, got %v at index %d", pair, results[i], i)
+		}
+	}
+}
+
+func TestQueryOutOfRange(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	ctx := context.TODO()
+
+	values := map[int]string{
+		1:  "one",
+		5:  "five",
+		10: "ten",
+	}
+
+	for key, value := range values {
+		sl.Upsert(key, func(k int, v string, exists bool) (string, error) {
+			return value, nil
+		})
+	}
+
+	// Query out of range of inserted elements
+	startKey, endKey := 15, 20
+	results, err := sl.Query(ctx, startKey, endKey)
+
+	if err != nil {
+		t.Fatalf("Error during Query: %v", err)
+	}
+
+	if len(results) != 0 {
+		t.Errorf("Expected empty result, got %v", results)
+	}
+}
+
+func TestQueryWithTimeout(t *testing.T) {
+	sl := NewSkipList[int, string]()
+	ctx, cancel := context.WithTimeout(context.Background(), 1)
+	defer cancel()
+
+	values := map[int]string{
+		1:  "one",
+		5:  "five",
+		10: "ten",
+	}
+
+	for key, value := range values {
+		sl.Upsert(key, func(k int, v string, exists bool) (string, error) {
+			return value, nil
+		})
+	}
+
+	// This simulates a situation where the query runs longer than expected.
+	// This timeout duration is super short, so the query is expected to fail.
+	_, err := sl.Query(ctx, 1, 10)
+
+	if err != context.DeadlineExceeded {
+		t.Fatalf("Expected DeadlineExceeded error, got: %v", err)
 	}
 }

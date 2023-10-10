@@ -3,9 +3,8 @@ package handler
 import (
 	"net/http"
 
+	// added auth import
 	"github.com/RICE-COMP318-FALL23/owldb-p1group37/database"
-	"github.com/RICE-COMP318-FALL23/owldb-p1group37/authorization" // added auth import
-
 )
 
 func NewHandler() http.Handler {
@@ -14,7 +13,7 @@ func NewHandler() http.Handler {
 	dbService := database.NewDatabaseService()
 
 	// Route /auth URL path to authHandler function
-	mux.HandleFunc("/auth", authorization.authHandler) 
+	// mux.HandleFunc("/auth", authorization.AuthHandler)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

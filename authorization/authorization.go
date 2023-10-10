@@ -39,7 +39,7 @@ type TokenInfo struct {
 var tokenStore = make(map[string]TokenInfo) // map token to TokenInfo struct (username + time)
 
 // HTTP handler function for authentication
-func authHandler(w http.ResponseWriter, r *http.Request) {
+func AuthHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "OPTIONS":
 		// For the /auth endpoint, indicate that POST and DELETE are allowed.

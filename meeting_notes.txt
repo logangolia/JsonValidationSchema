@@ -60,3 +60,12 @@ Meeting 6: 10/5
         Work on PATCH method, increase volume of test suite over the weekend.
 
 Next meeting on Tuesday, we will sync up the packages.
+Meeting 7: 10/10
+    Emerson:
+        UpdateCheck functionality
+        PATCH operation
+    Brian:
+        Authorization
+    Logan: 
+        JSON Validation
+Meeting again 10/12

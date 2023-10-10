@@ -3,12 +3,17 @@
 package authorization
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"sync"
 	"time"
 )
+
+type RequestBody struct {
+	Username string `json:"username"`
+}
 
 // Define constants for token length and character set
 const strlen = 15
@@ -46,7 +51,14 @@ func AuthHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "POST, DELETE")
 		w.WriteHeader(http.StatusOK)
 	case "POST": // Handle POST method for user authentication
-		username := r.URL.Query().Get("username") // Get username from the query parameter
+		var body RequestBody
+		err := json.NewDecoder(r.Body).Decode(&body)
+		if err != nil {
+			http.Error(w, "Bad Request", http.StatusBadRequest)
+			return
+		}
+
+		username := body.Username
 		if username == "" {
 			http.Error(w, "Username is required", http.StatusBadRequest) // Return error if username is missing
 			return

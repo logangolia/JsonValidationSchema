@@ -28,13 +28,14 @@ func SetOrUpdate[K cmp.Ordered, V any](key K, currValue V, exists bool) (newValu
 }
 
 // NewDatabaseService creates and returns a new DatabaseService struct.
-func NewDatabaseService() *DatabaseService {
+func NewDatabaseService(auth *authorization.AuthHandler) *DatabaseService {
 	var ds DatabaseService
 	ds.collections = skiplist.NewSkipList[string, Collection]()
+	ds.auth = auth
 	return &ds
 }
 
-func (ds *DatabaseService) dbMethods(w http.ResponseWriter, r *http.Request) {
+func (ds *DatabaseService) DBMethods(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		ds.HandleOptions(w, r)
 		return

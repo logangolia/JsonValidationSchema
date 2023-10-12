@@ -16,18 +16,20 @@ import (
 // It contains a method to address each of the HTTP methods.
 type DatabaseService struct {
 	mu          sync.Mutex
-	collections skiplist.SkipList[string, Collection]
+	collections skiplist.SkipList[string, *Collection]
 }
 
-// Placeholder dummy function for skipList implementation
-func SetOrUpdate[K cmp.Ordered, V any](key K, currValue V, exists bool) (newValue V, err error) {
-	return currValue, nil
+func GenerateUpdateCheck[K cmp.Ordered, V any](valueToAdd V) skiplist.UpdateCheck[K, V] {
+	return func(key K, currValue V, exists bool) (newValue V, err error) {
+		// In this case, whether the item exists or not, it will set/update the value to valueToAdd.
+		return valueToAdd, nil
+	}
 }
 
 // NewDatabaseService creates and returns a new DatabaseService struct.
 func NewDatabaseService() *DatabaseService {
 	return &DatabaseService{
-		collections: skiplist.NewSkipList[string, Collection](),
+		collections: skiplist.NewSkipList[string, *Collection](),
 	}
 }
 
@@ -43,20 +45,15 @@ func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
 
 	// Initalize currentItem to the highest-level collection in the path
 	var currentItem PathItem
-	collection, exists := ds.collections.Find(pathParts[0])
+	collection, exists := ds.collections.Find(pathParts[1])
 	if !exists {
 		http.Error(w, "Item not found", http.StatusNotFound)
 		return
 	}
-	currentItem = &collection
+	currentItem = collection
 
-	if !exists {
-		http.Error(w, "Item not found", http.StatusNotFound)
-		return
-	}
-
-	// Start from index 1 since we've already processed the first collection
-	for _, part := range pathParts[1:] {
+	// Start from index 2 since we've already processed the first collection and want to skip "v1"
+	for _, part := range pathParts[2:] {
 		nextItem, exists := currentItem.GetChildByName(part)
 		if !exists {
 			http.Error(w, "Item not found", http.StatusNotFound)
@@ -82,27 +79,37 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Lock the databse
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
-	var currentItem PathItem
-	collection, exists := ds.collections.Find(pathParts[0])
-	if !exists {
-		http.Error(w, "Item not found", http.StatusNotFound)
+	// Edge case where we are creating a top level database
+	if len(pathParts) == 2 {
+		collectionName := pathParts[len(pathParts)-1]
+		newCollection := NewCollection(collectionName, r.URL.Path)
+		updateFunc := GenerateUpdateCheck[string, *Collection](newCollection)
+		ds.collections.Upsert(collectionName, updateFunc)
+		response, _ := newCollection.MarshalURI()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		w.Write(response)
 		return
 	}
-	currentItem = &collection
 
+	// Find the top-level database of the path
+	var currentItem PathItem
+	database, exists := ds.collections.Find(pathParts[1])
 	if !exists {
-		http.Error(w, "Collection not found", http.StatusNotFound)
+		http.Error(w, "Database not found", http.StatusNotFound)
 		return
 	}
+	currentItem = database
 
 	// Traverse through the path until the penultimate item
-	for i := 1; i < len(pathParts)-1; i++ {
+	for i := 2; i < len(pathParts)-2; i++ {
 		nextItem, exists := currentItem.GetChildByName(pathParts[i])
 		if !exists {
-			http.Error(w, "Path item not found", http.StatusNotFound)
+			http.Error(w, "Path item not found: "+pathParts[i], http.StatusNotFound)
 			return
 		}
 		currentItem = nextItem
@@ -111,9 +118,10 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 	// Handle the final item in the path
 	if len(pathParts)%2 == 0 { // Collection
 		collectionName := pathParts[len(pathParts)-1]
-		newCollection := NewCollection(collectionName)
-		currentItem.(*Document).Collections.Upsert(collectionName, SetOrUpdate)
-		response, _ := newCollection.Marshal()
+		newCollection := NewCollection(collectionName, r.URL.Path)
+		updateFunc := GenerateUpdateCheck[string, *Collection](newCollection)
+		currentItem.(*Document).Collections.Upsert(collectionName, updateFunc)
+		response, _ := newCollection.MarshalURI()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		w.Write(response)
@@ -126,9 +134,10 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
 		docName := pathParts[len(pathParts)-1]
-		doc := NewDocument("/"+docName, body, "server", time.Now(), "/v1/"+pathParts[len(pathParts)-2])
-		currentItem.(*Collection).Documents.Upsert(docName, SetOrUpdate)
-		response, _ := doc.Marshal()
+		newDocument := NewDocument("/"+docName, body, "server", time.Now(), r.URL.Path)
+		updateFunc := GenerateUpdateCheck[string, *Document](newDocument)
+		currentItem.(*Collection).Documents.Upsert(docName, updateFunc)
+		response, _ := newDocument.MarshalURI()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		w.Write(response)
@@ -146,12 +155,12 @@ func (ds *DatabaseService) HandlePost(w http.ResponseWriter, r *http.Request) {
 	defer ds.mu.Unlock()
 
 	var currentItem PathItem
-	collection, exists := ds.collections.Find(pathParts[0])
+	collection, exists := ds.collections.Find(pathParts[1])
 	if !exists {
 		http.Error(w, "Item not found", http.StatusNotFound)
 		return
 	}
-	currentItem = &collection
+	currentItem = collection
 
 	if !exists {
 		http.Error(w, "Collection not found", http.StatusNotFound)
@@ -159,7 +168,7 @@ func (ds *DatabaseService) HandlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Traverse through the path until the penultimate item
-	for i := 1; i < len(pathParts)-1; i++ {
+	for i := 2; i < len(pathParts)-1; i++ {
 		nextItem, exists := currentItem.GetChildByName(pathParts[i])
 		if !exists {
 			http.Error(w, "Path item not found", http.StatusNotFound)
@@ -174,7 +183,9 @@ func (ds *DatabaseService) HandlePost(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Collection already exists", http.StatusConflict)
 			return
 		}
-		currentItem.(*Document).Collections.Upsert(collectionName, SetOrUpdate)
+		newCollection := NewCollection(collectionName, r.URL.Path)
+		updateFunc := GenerateUpdateCheck[string, *Collection](newCollection)
+		currentItem.(*Document).Collections.Upsert(collectionName, updateFunc)
 	} else { // Odd length, so it's a document
 		docName := pathParts[len(pathParts)-1]
 		_, exists := currentItem.(*Collection).Documents.Find(docName)
@@ -182,8 +193,14 @@ func (ds *DatabaseService) HandlePost(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Document already exists", http.StatusConflict)
 			return
 		}
-
-		currentItem.(*Collection).Documents.Upsert(docName, SetOrUpdate)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		newDocument := NewDocument(docName, body, "server", time.Now(), r.URL.Path)
+		updateFunc := GenerateUpdateCheck[string, *Document](newDocument)
+		currentItem.(*Collection).Documents.Upsert(docName, updateFunc)
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -201,12 +218,12 @@ func (ds *DatabaseService) HandlePatch(w http.ResponseWriter, r *http.Request) {
 	defer ds.mu.Unlock()
 
 	var currentItem PathItem
-	collection, exists := ds.collections.Find(pathParts[0])
+	collection, exists := ds.collections.Find(pathParts[1])
 	if !exists {
 		http.Error(w, "Item not found", http.StatusNotFound)
 		return
 	}
-	currentItem = &collection
+	currentItem = collection
 
 	if !exists {
 		http.Error(w, "Collection not found", http.StatusNotFound)
@@ -214,7 +231,7 @@ func (ds *DatabaseService) HandlePatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Traverse through the path until the penultimate item
-	for i := 1; i < len(pathParts)-1; i++ {
+	for i := 2; i < len(pathParts)-1; i++ {
 		nextItem, exists := currentItem.GetChildByName(pathParts[i])
 		if !exists {
 			http.Error(w, "Path item not found", http.StatusNotFound)
@@ -270,12 +287,12 @@ func (ds *DatabaseService) HandleDelete(w http.ResponseWriter, r *http.Request) 
 	defer ds.mu.Unlock()
 
 	var currentItem PathItem
-	collection, exists := ds.collections.Find(pathParts[0])
+	collection, exists := ds.collections.Find(pathParts[1])
 	if !exists {
 		http.Error(w, "Item not found", http.StatusNotFound)
 		return
 	}
-	currentItem = &collection
+	currentItem = collection
 
 	if !exists {
 		http.Error(w, "Collection not found", http.StatusNotFound)
@@ -283,7 +300,7 @@ func (ds *DatabaseService) HandleDelete(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Traverse through the path until the penultimate item
-	for i := 1; i < len(pathParts)-1; i++ {
+	for i := 2; i < len(pathParts)-1; i++ {
 		nextItem, exists := currentItem.GetChildByName(pathParts[i])
 		if !exists {
 			http.Error(w, "Path item not found", http.StatusNotFound)
@@ -326,12 +343,12 @@ func (ds *DatabaseService) HandleOptions(w http.ResponseWriter, r *http.Request)
 	defer ds.mu.Unlock()
 
 	var currentItem PathItem
-	collection, exists := ds.collections.Find(pathParts[0])
+	collection, exists := ds.collections.Find(pathParts[1])
 	if !exists {
 		http.Error(w, "Item not found", http.StatusNotFound)
 		return
 	}
-	currentItem = &collection
+	currentItem = collection
 
 	if !exists {
 		http.Error(w, "Collection not found", http.StatusNotFound)
@@ -339,7 +356,7 @@ func (ds *DatabaseService) HandleOptions(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Traverse through the path until the penultimate item
-	for i := 1; i < len(pathParts)-1; i++ {
+	for i := 2; i < len(pathParts)-1; i++ {
 		nextItem, exists := currentItem.GetChildByName(pathParts[i])
 		if !exists {
 			http.Error(w, "Path item not found", http.StatusNotFound)

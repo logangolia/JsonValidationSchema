@@ -30,13 +30,8 @@ func splitPath(path string) ([]string, error) {
 		parts[i] = decodedPart
 	}
 
-	// Remove the v1 from the path parts as we will not use it
-	if len(parts) > 0 && parts[0] == "v1" {
-		parts = parts[1:]
-	}
-
 	// Check if the path is empty
-	if len(parts) == 0 {
+	if len(parts) == 0 || len(parts) == 1 {
 		return nil, fmt.Errorf("Empty Path")
 	}
 

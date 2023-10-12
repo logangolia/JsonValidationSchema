@@ -39,7 +39,7 @@ func main() {
 	server.Addr = ":" + fmt.Sprintf("%d", port)
 
 	// Assign the handler to the server
-	server.Handler = handler.NewHandler()
+	server.Handler = handler.New()
 
 	// The following code should go last and remain unchanged.
 	// Note that you must actually initialize 'server' and 'port'

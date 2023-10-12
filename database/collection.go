@@ -11,17 +11,17 @@ import (
 
 // The Collection struct represents a collection in a database.
 type Collection struct {
-	Name      string
-	Documents skiplist.SkipList[string, Document]
-	URI       string `json:"uri"`
+	Name      string                               `json:"-"`
+	Documents skiplist.SkipList[string, *Document] `json:"-"`
+	URI       string                               `json:"uri"`
 }
 
 // NewCollection creates and returns a new Collection struct with the given name.
-func NewCollection(name string) *Collection {
+func NewCollection(name string, uri string) *Collection {
 	return &Collection{
 		Name:      name,
-		Documents: skiplist.NewSkipList[string, Document](),
-		URI:       name,
+		Documents: skiplist.NewSkipList[string, *Document](),
+		URI:       uri,
 	}
 }
 
@@ -30,7 +30,7 @@ func NewCollection(name string) *Collection {
 func (c *Collection) GetChildByName(name string) (PathItem, bool) {
 	child, exists := c.Documents.Find(name)
 	if exists {
-		return &child, true
+		return child, true
 	}
 	return nil, false
 }
@@ -42,7 +42,7 @@ func (c *Collection) Marshal() ([]byte, error) {
 	ctx := context.TODO()
 
 	// Type assertion
-	impl, ok := c.Documents.(*skiplist.SkipListImpl[string, Document])
+	impl, ok := c.Documents.(*skiplist.SkipListImpl[string, *Document])
 	if !ok {
 		return nil, fmt.Errorf("Documents is not an instance of SkipListImpl")
 	}
@@ -53,6 +53,9 @@ func (c *Collection) Marshal() ([]byte, error) {
 		return nil, err
 	}
 
+	fmt.Println("documentPairs")
+	fmt.Println(documentPairs)
+
 	// Marshal nodes into the buffer
 	for i := range documentPairs {
 		docBytes, err := json.Marshal(documentPairs[i].Value)
@@ -62,5 +65,18 @@ func (c *Collection) Marshal() ([]byte, error) {
 		buffer.Write(docBytes)
 	}
 
+	fmt.Println("buffer.Bytes()")
+	fmt.Println(buffer.Bytes())
+
 	return buffer.Bytes(), nil
+}
+
+// MarshalURI is a function that marshals the collection itself, rather than the documents inside it
+// MarshalURI is used in response to PUT for collections, while Marshal is used on GET
+func (c *Collection) MarshalURI() ([]byte, error) {
+	response, err := json.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("Error marshaling dollection: %w", err)
+	}
+	return response, nil
 }

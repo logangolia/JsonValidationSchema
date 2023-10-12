@@ -10,12 +10,11 @@ import (
 
 func New() http.Handler {
 	auth := authorization.NewAuth()
-	ds := database.NewDatabaseService()
-	ds.auth = auth
+	ds := database.NewDatabaseService(auth)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth", auth.HandleAuthFunctions)
-	mux.HandleFunc("/", ds.dbMethods)
+	mux.HandleFunc("/", ds.DBMethods)
 
 	return mux
 }

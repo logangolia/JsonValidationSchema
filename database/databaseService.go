@@ -126,9 +126,12 @@ func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	pathParts, err := splitPath(r.URL.Path)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
 		return
 	}
 
@@ -141,31 +144,24 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 	if len(pathParts) == 2 {
 		slog.Info("PUT case database")
 		collectionName := pathParts[1]
+		// Check if the database already exists
+		_, exists := ds.collections.Find(collectionName)
+		if exists {
+			slog.Info("Database already exists")
+			errorMessage := "\"unable to create database " + collectionName + ": exists\""
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(errorMessage))
+			return
+		}
 		newCollection := NewCollection(collectionName, r.URL.Path)
 		updateFunc := GenerateUpdateCheck[string, *Collection](newCollection)
 		ds.collections.Upsert(collectionName, updateFunc)
 		response, err := newCollection.MarshalURI()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		slog.Info("Database Created")
-		w.WriteHeader(http.StatusCreated)
-		w.Write(response)
-		return
-	}
-
-	slog.Info("PUT case Collection")
-
-	// Edge case where we are creating a top level database
-	if len(pathParts) == 2 {
-		collectionName := pathParts[len(pathParts)-1]
-		newCollection := NewCollection(collectionName, r.URL.Path)
-		updateFunc := GenerateUpdateCheck[string, *Collection](newCollection)
-		ds.collections.Upsert(collectionName, updateFunc)
-		response, _ := newCollection.MarshalURI()
-		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		w.Write(response)
 		return
@@ -175,17 +171,28 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 	var currentItem PathItem
 	database, exists := ds.collections.Find(pathParts[1])
 	if !exists {
-		http.Error(w, "Database not found", http.StatusNotFound)
+		errorMessage := "\"unable to create/replace document: not found\""
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(errorMessage))
 		return
 	}
 	currentItem = database
 
 	// Traverse through the path until the penultimate item
-	for i := 2; i < len(pathParts)-2; i++ {
+	for i := 2; i < len(pathParts)-1; i++ {
 		nextItem, exists := currentItem.GetChildByName(pathParts[i])
 		if !exists {
-			http.Error(w, "Path item not found: "+pathParts[i], http.StatusNotFound)
-			return
+			if len(pathParts)%2 == 0 {
+				errorMessage := "\"Document does not exist\""
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte(errorMessage))
+				return
+			} else {
+				errorMessage := "\"Collection does not exist\""
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte(errorMessage))
+				return
+			}
 		}
 		currentItem = nextItem
 	}
@@ -197,28 +204,45 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 		newCollection := NewCollection(collectionName, r.URL.Path)
 		updateFunc := GenerateUpdateCheck[string, *Collection](newCollection)
 		currentItem.(*Document).Collections.Upsert(collectionName, updateFunc)
-		response, _ := newCollection.MarshalURI()
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Add("Access-Control-Allow-Origin", "*")
+		response, err := newCollection.MarshalURI()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
 		w.WriteHeader(http.StatusCreated)
 		w.Write(response)
 	} else { // Odd length, so it's a document
 		slog.Info("PUT case Document")
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
 			return
 		}
 		defer r.Body.Close()
-
 		docName := pathParts[len(pathParts)-1]
+		// Check if the document is being created for the first time or being overriden
+		override := false
+		_, exists := currentItem.(*Collection).Documents.Find(docName)
+		if exists {
+			override = true
+		}
 		newDocument := NewDocument("/"+docName, body, "server", time.Now(), r.URL.Path)
 		updateFunc := GenerateUpdateCheck[string, *Document](newDocument)
 		currentItem.(*Collection).Documents.Upsert(docName, updateFunc)
-		response, _ := newDocument.MarshalURI()
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Add("Access-Control-Allow-Origin", "*")
-		w.WriteHeader(http.StatusCreated)
+		response, err := newDocument.MarshalURI()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		// Overriding/Creating a document have different response codes
+		if override {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
 		w.Write(response)
 	}
 }
@@ -240,11 +264,6 @@ func (ds *DatabaseService) HandlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	currentItem = collection
-
-	if !exists {
-		http.Error(w, "Collection not found", http.StatusNotFound)
-		return
-	}
 
 	// Traverse through the path until the penultimate item
 	for i := 2; i < len(pathParts)-1; i++ {

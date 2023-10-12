@@ -4,10 +4,12 @@ import (
 	"cmp"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/RICE-COMP318-FALL23/owldb-p1group37/authorization"
 	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skiplist"
 )
 
@@ -16,6 +18,7 @@ import (
 // It contains a method to address each of the HTTP methods.
 type DatabaseService struct {
 	mu          sync.Mutex
+	auth        *authorization.AuthHandler
 	collections skiplist.SkipList[string, Collection]
 }
 
@@ -26,8 +29,49 @@ func SetOrUpdate[K cmp.Ordered, V any](key K, currValue V, exists bool) (newValu
 
 // NewDatabaseService creates and returns a new DatabaseService struct.
 func NewDatabaseService() *DatabaseService {
-	return &DatabaseService{
-		collections: skiplist.NewSkipList[string, Collection](),
+	var ds DatabaseService
+	ds.collections = skiplist.NewSkipList[string, Collection]()
+	return &ds
+}
+
+func (ds *DatabaseService) dbMethods(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		ds.HandleOptions(w, r)
+		return
+	}
+
+	if ds.auth.CheckToken(r.Header.Get("Authorization")) != true {
+		w.Header().Add("WWW-Authenticate", "Bearer")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	slog.Info("checking token succeeded")
+
+	switch r.Method {
+	case http.MethodGet:
+		slog.Info("GET called on database")
+		ds.HandleGet(w, r)
+		slog.Info("GET successful")
+	case http.MethodPut:
+		slog.Info("PUT called on db")
+		ds.HandlePut(w, r)
+		slog.Info("PUT successful")
+	case http.MethodPost:
+		slog.Info("POST called on db")
+		ds.HandlePost(w, r)
+		slog.Info("POST successful")
+	case http.MethodPatch:
+		slog.Info("PATCH called on db")
+		ds.HandlePatch(w, r)
+		slog.Info("PATCH successful")
+	case http.MethodDelete:
+		slog.Info("DELETE called on db")
+		ds.HandleDelete(w, r)
+		slog.Info("DELETE successful")
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -71,6 +115,14 @@ func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Query().Get("mode") == "subscribe" {
+		subInst := NewSubHandler()
+		http.Handle(r.URL.Path, subInst)
+		http.HandleFunc(r.URL.Path, subInst.MessageHandler)
+
+	}
+
+	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
@@ -82,8 +134,29 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Info(pathParts[0])
+
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
+
+	if len(pathParts) == 1 {
+		slog.Info("PUT case database")
+		dbName := pathParts[0]
+		newCollection := NewCollection(dbName)
+		ds.collections.Upsert(dbName, SetOrUpdate)
+		response, err := newCollection.Marshal()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		slog.Info("Database Created")
+		w.WriteHeader(http.StatusCreated)
+		w.Write(response)
+		return
+	}
+
+	slog.Info("PUT case Collection")
 
 	var currentItem PathItem
 	collection, exists := ds.collections.Find(pathParts[0])
@@ -110,14 +183,17 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 
 	// Handle the final item in the path
 	if len(pathParts)%2 == 0 { // Collection
+		slog.Info("PUT case Collection")
 		collectionName := pathParts[len(pathParts)-1]
 		newCollection := NewCollection(collectionName)
 		currentItem.(*Document).Collections.Upsert(collectionName, SetOrUpdate)
 		response, _ := newCollection.Marshal()
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Add("Access-Control-Allow-Origin", "*")
 		w.WriteHeader(http.StatusCreated)
 		w.Write(response)
 	} else { // Odd length, so it's a document
+		slog.Info("PUT case Document")
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -130,6 +206,7 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 		currentItem.(*Collection).Documents.Upsert(docName, SetOrUpdate)
 		response, _ := doc.Marshal()
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Add("Access-Control-Allow-Origin", "*")
 		w.WriteHeader(http.StatusCreated)
 		w.Write(response)
 	}
@@ -185,7 +262,7 @@ func (ds *DatabaseService) HandlePost(w http.ResponseWriter, r *http.Request) {
 
 		currentItem.(*Collection).Documents.Upsert(docName, SetOrUpdate)
 	}
-
+	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -254,7 +331,7 @@ func (ds *DatabaseService) HandlePatch(w http.ResponseWriter, r *http.Request) {
 		target.Data = updatedDoc.Data
 		target.URI = updatedDoc.URI
 	}
-
+	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Item updated successfully"))
 }
@@ -310,13 +387,14 @@ func (ds *DatabaseService) HandleDelete(w http.ResponseWriter, r *http.Request) 
 		}
 		currentItem.(*Collection).Documents.Remove(docName)
 	}
-
+	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Item deleted successfully"))
 }
 
 func (ds *DatabaseService) HandleOptions(w http.ResponseWriter, r *http.Request) {
 	pathParts, err := splitPath(r.URL.Path)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -324,6 +402,15 @@ func (ds *DatabaseService) HandleOptions(w http.ResponseWriter, r *http.Request)
 
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
+
+	if len(pathParts) == 1 {
+		w.Header().Set("Allow", "PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Methods", "PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
 	var currentItem PathItem
 	collection, exists := ds.collections.Find(pathParts[0])
@@ -372,7 +459,9 @@ func (ds *DatabaseService) HandleOptions(w http.ResponseWriter, r *http.Request)
 			allowedMethods += ", POST, PUT"
 		}
 	}
-
 	w.Header().Set("Allow", allowedMethods)
+	w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 	w.WriteHeader(http.StatusOK)
 }

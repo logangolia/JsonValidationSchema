@@ -11,14 +11,14 @@ import (
 // The Document struct represents a document in a database.
 type Document struct {
 	Name        string                                 `json:"path"`
-	Data        []byte                                 `json:"doc"`
+	Data        interface{}                            `json:"doc"`
 	Collections skiplist.SkipList[string, *Collection] `json:"-"`
 	Metadata    Metadata                               `json:"meta"`
 	URI         string                                 `json:"-"`
 }
 
 // NewDocument creates and returns a new Document struct based on the inputs.
-func NewDocument(name string, data []byte, user string, time time.Time, uri string) *Document {
+func NewDocument(name string, data interface{}, user string, time time.Time, uri string) *Document {
 	return &Document{
 		Name:        name,
 		Data:        data,

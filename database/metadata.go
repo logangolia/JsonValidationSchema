@@ -15,9 +15,9 @@ type Metadata struct {
 // NewMetadata creates and returns a new Metadata struct based on the inputs.
 func NewMetadata(user string, time time.Time) *Metadata {
 	return &Metadata{
+		CreatedBy:      user,
 		CreatedAt:      time,
-		CreatedBy:      "server",
+		LastModifiedBy: user,
 		LastModifiedAt: time,
-		LastModifiedBy: "server",
 	}
 }

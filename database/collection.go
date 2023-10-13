@@ -1,7 +1,6 @@
 package database
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -38,37 +37,24 @@ func (c *Collection) GetChildByName(name string) (PathItem, bool) {
 // Marshal implements the function from the PathItem interface.
 // Calling Marshal() marshals and returns the collection as well as an error.
 func (c *Collection) Marshal() ([]byte, error) {
-	var buffer bytes.Buffer
 	ctx := context.TODO()
 
-	// Type assertion
-	impl, ok := c.Documents.(*skiplist.SkipListImpl[string, *Document])
-	if !ok {
-		return nil, fmt.Errorf("Documents is not an instance of SkipListImpl")
-	}
-
 	// Query for nodes
-	documentPairs, err := c.Documents.Query(ctx, impl.Head.Pair.Key, impl.Tail.Pair.Key)
+	documentPairs, err := c.Documents.Query(ctx,
+		c.Documents.(*skiplist.SkipListImpl[string, *Document]).Head.Pair.Key,
+		c.Documents.(*skiplist.SkipListImpl[string, *Document]).Tail.Pair.Key)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println("documentPairs")
-	fmt.Println(documentPairs)
-
-	// Marshal nodes into the buffer
-	for i := range documentPairs {
-		docBytes, err := json.Marshal(documentPairs[i].Value)
-		if err != nil {
-			return nil, err
-		}
-		buffer.Write(docBytes)
+	var documents []*Document
+	// Append each document to the slice
+	for _, pair := range documentPairs {
+		documents = append(documents, pair.Value)
 	}
 
-	fmt.Println("buffer.Bytes()")
-	fmt.Println(buffer.Bytes())
-
-	return buffer.Bytes(), nil
+	// Marshal the entire slice into its JSON representation
+	return json.Marshal(documents)
 }
 
 // MarshalURI is a function that marshals the collection itself, rather than the documents inside it

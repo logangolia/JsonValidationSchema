@@ -3,7 +3,6 @@ package skiplist
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"math/rand"
 )
 
@@ -296,13 +295,10 @@ func (sl *SkipListImpl[K, V]) randomLevel() int {
 
 // Query returns all elements in the skip list (in order) with keys between start and end inclusive.
 func (sl *SkipListImpl[K, V]) Query(ctx context.Context, start K, end K) ([]Pair[K, V], error) {
-	fmt.Println("Query")
 	// Get the first node in the Query.
 	var loopNode *Node[K, V]
 	_, _, firstNodeSuccs := sl.findHelper(start)
 	loopNode = firstNodeSuccs[0]
-	fmt.Println("First Node")
-	fmt.Println(loopNode.value)
 	// Get the last node in the Query.
 	var lastNode *Node[K, V]
 	if end == sl.Tail.key {
@@ -315,9 +311,6 @@ func (sl *SkipListImpl[K, V]) Query(ctx context.Context, start K, end K) ([]Pair
 			lastNode = lastNodePreds[0]
 		}
 	}
-
-	fmt.Println("Last Node")
-	fmt.Println(lastNode.value)
 
 	// Loop through the nodes from the start to end node, appending them to results.
 	var results []Pair[K, V]
@@ -339,9 +332,6 @@ func (sl *SkipListImpl[K, V]) Query(ctx context.Context, start K, end K) ([]Pair
 		pair := Pair[K, V]{Key: loopNode.key, Value: loopNode.value}
 		results = append(results, pair)
 	}
-
-	fmt.Println("results")
-	fmt.Println(results)
 
 	return results, nil
 }

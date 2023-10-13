@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/RICE-COMP318-FALL23/owldb-p1group37/authorization"
+	"github.com/RICE-COMP318-FALL23/owldb-p1group37/jsonschema"
 	"github.com/RICE-COMP318-FALL23/owldb-p1group37/skiplist"
 )
 
@@ -17,9 +18,10 @@ import (
 // All documents and collections are stored recursively within the DatabaseService.
 // It contains a method to address each of the HTTP methods.
 type DatabaseService struct {
-	mu          sync.Mutex
-	auth        *authorization.AuthHandler
-	collections skiplist.SkipList[string, *Collection]
+	mu              sync.Mutex
+	auth            *authorization.AuthHandler
+	collections     skiplist.SkipList[string, *Collection]
+	schemaValidator jsonschema.SchemaValidator
 }
 
 func GenerateUpdateCheck[K cmp.Ordered, V any](valueToAdd V) skiplist.UpdateCheck[K, V] {
@@ -30,10 +32,11 @@ func GenerateUpdateCheck[K cmp.Ordered, V any](valueToAdd V) skiplist.UpdateChec
 }
 
 // NewDatabaseService creates and returns a new DatabaseService struct.
-func NewDatabaseService(auth *authorization.AuthHandler) *DatabaseService {
+func NewDatabaseService(auth *authorization.AuthHandler, s jsonschema.SchemaValidator) *DatabaseService {
 	var ds DatabaseService
 	ds.collections = skiplist.NewSkipList[string, *Collection]()
 	ds.auth = auth
+	ds.schemaValidator = s
 	return &ds
 }
 
@@ -42,7 +45,7 @@ func (ds *DatabaseService) DBMethods(w http.ResponseWriter, r *http.Request) {
 		ds.HandleOptions(w, r)
 		return
 	}
-
+	
 	if ds.auth.CheckToken(r.Header.Get("Authorization")) != true {
 		w.Header().Add("WWW-Authenticate", "Bearer")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -79,6 +82,7 @@ func (ds *DatabaseService) DBMethods(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
+
 	// Set header for response.
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -140,6 +144,20 @@ func (ds *DatabaseService) HandleGet(w http.ResponseWriter, r *http.Request) {
 func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 	// Set header for response.
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	slog.Info("PUT called on db")
+	// // read json from the body of the request
+	// body, err := io.ReadAll(r.Body)
+	// if err != nil {
+	// 	sendErrorResponse(w, http.StatusInternalServerError, err.Error())
+	// 	return
+	// }
+	// r.Body.Close()
+
+	// // check if the body contains valid json when compared against the schema
+	// if ds.schemaValidator.ValidateData(body) != nil {
+	// 	sendErrorResponse(w, http.StatusBadRequest, "Invalid JSON format")
+	// 	return
+	// }
 
 	// Parse the path.
 	pathParts, err := splitPath(r.URL.Path)
@@ -230,6 +248,11 @@ func (ds *DatabaseService) HandlePut(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer r.Body.Close()
+		// check if the body contains valid json when compared against the schema
+		if ds.schemaValidator.ValidateData(body) != nil {
+			sendErrorResponse(w, http.StatusBadRequest, "Invalid JSON format")
+			return
+		}
 		docName := pathParts[len(pathParts)-1]
 		// Check if the document is being created for the first time or being overriden
 		override := false
